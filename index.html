@@ -1,0 +1,2795 @@
+<title>Cutting Room</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* ===================================================================
+   Cutting Room — a timeline-based photo + video editor.
+   Layout: library (left) / preview+transport (center) / inspector (right)
+   over a three-track timeline (video, text, music). Dark-first, like
+   every real NLE, because color judgments are made against this screen.
+   =================================================================== */
+:root{
+  --bg:#0c0e11; --bg-raised:#14171c; --panel:#15181d; --panel-2:#1b1f26;
+  --border:#262b33; --border-soft:#1e2228;
+  --text:#e9ebee; --text-dim:#9aa3ad; --text-faint:#5e6670;
+  --accent:#e3a73f; --accent-ink:#201403; --accent-soft:#3a2f1a;
+  --accent2:#45c7b8;
+  --danger:#e2594f; --danger-soft:#3a1f1d;
+  --ok:#55c17e;
+  --track-video:#20262f; --track-text:#262033; --track-music:#1f2b26;
+  --font-display:'Archivo',system-ui,sans-serif;
+  --font-body:'Work Sans',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+  --radius:10px;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    --bg:#f3f1ec; --bg-raised:#ffffff; --panel:#fbfaf7; --panel-2:#eeece5;
+    --border:#ddd9cf; --border-soft:#e7e3d9;
+    --text:#211d16; --text-dim:#6b6558; --text-faint:#a39d8e;
+    --accent:#b9792a; --accent-ink:#fff8ec; --accent-soft:#f1dfb9;
+    --accent2:#1f8f82;
+    --danger:#c43f35; --danger-soft:#f6ded9;
+    --ok:#2f8f57;
+    --track-video:#e7e4dc; --track-text:#eadff0; --track-music:#dfeee3;
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#f3f1ec; --bg-raised:#ffffff; --panel:#fbfaf7; --panel-2:#eeece5;
+  --border:#ddd9cf; --border-soft:#e7e3d9;
+  --text:#211d16; --text-dim:#6b6558; --text-faint:#a39d8e;
+  --accent:#b9792a; --accent-ink:#fff8ec; --accent-soft:#f1dfb9;
+  --accent2:#1f8f82;
+  --danger:#c43f35; --danger-soft:#f6ded9;
+  --ok:#2f8f57;
+  --track-video:#e7e4dc; --track-text:#eadff0; --track-music:#dfeee3;
+  color-scheme:light;
+}
+:root[data-theme="dark"]{ color-scheme:dark; }
+
+*{box-sizing:border-box;}
+[hidden]{display:none!important;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font:15px/1.4 var(--font-body);
+  overflow:hidden; /* the app owns scrolling internally */
+}
+button{font-family:inherit;}
+input,select,textarea{font-family:inherit; color:inherit;}
+.hidden-input{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;}
+
+.app{
+  display:flex; flex-direction:column; height:100%;
+  padding-left:max(0px, env(safe-area-inset-left,0px));
+  padding-right:max(0px, env(safe-area-inset-right,0px));
+}
+
+/* ---------- top bar ---------- */
+.topbar{
+  display:flex; align-items:center; gap:14px;
+  padding:10px 16px; border-bottom:1px solid var(--border);
+  background:var(--bg-raised); flex:0 0 auto;
+}
+.brand{
+  font-family:var(--font-display); font-weight:800; font-size:17px;
+  letter-spacing:0.01em; display:flex; align-items:center; gap:8px;
+}
+.brand-mark{color:var(--accent); font-size:18px;}
+.topbar-center{margin-left:8px;}
+.topbar-right{margin-left:auto; display:flex; align-items:center; gap:10px;}
+.field-inline{display:flex; align-items:center; gap:7px; font-size:13px; color:var(--text-dim);}
+.field-inline select{
+  background:var(--panel-2); color:var(--text); border:1px solid var(--border);
+  border-radius:7px; padding:6px 9px; font-size:13px;
+}
+.hint-strip{font-size:12px; color:var(--text-faint); margin-left:4px; max-width:360px;}
+
+.btn{
+  font-family:var(--font-body); font-weight:600; font-size:13px;
+  padding:8px 14px; border-radius:8px; border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text); cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+}
+.btn:hover{background:var(--border-soft);}
+.btn:disabled{opacity:0.4; cursor:not-allowed;}
+.btn-primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+.btn-primary:hover{filter:brightness(1.07);}
+.btn-small{padding:6px 10px; font-size:12px;}
+.btn-danger{color:var(--danger); border-color:var(--danger-soft);}
+.btn-danger:hover{background:var(--danger-soft);}
+.btn-icon{
+  width:38px; height:38px; border-radius:50%; border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text); font-size:14px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+}
+.btn-icon:hover{background:var(--border-soft);}
+.spinner{
+  width:13px; height:13px; border-radius:50%;
+  border:2px solid rgba(255,255,255,0.35); border-top-color:currentColor;
+  animation:spin 0.7s linear infinite; display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+@media (prefers-reduced-motion:reduce){ .spinner{animation-duration:1.4s;} }
+
+/* ---------- workspace (library | stage | inspector) ---------- */
+.workspace{flex:1 1 auto; display:flex; min-height:0; overflow:hidden;}
+
+.panel{background:var(--panel); display:flex; flex-direction:column; min-width:0;}
+.panel-library{width:230px; border-right:1px solid var(--border); flex:0 0 auto;}
+.panel-inspector{width:280px; border-left:1px solid var(--border); flex:0 0 auto; overflow-y:auto;}
+.panel-head{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:12px 12px 10px; font-family:var(--font-display); font-weight:700;
+  font-size:13px; letter-spacing:0.03em; text-transform:uppercase; color:var(--text-dim);
+  border-bottom:1px solid var(--border-soft); flex:0 0 auto;
+}
+.library-grid{
+  padding:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;
+  overflow-y:auto; flex:1 1 auto; align-content:start;
+}
+.media-card{
+  position:relative; border:1px solid var(--border); border-radius:8px;
+  overflow:hidden; background:var(--panel-2); cursor:grab; min-width:0;
+  aspect-ratio:1/1; display:flex; align-items:stretch;
+}
+.media-card:active{cursor:grabbing;}
+.media-card img{width:100%; height:100%; object-fit:cover; display:block;}
+.media-card .kind-badge{
+  position:absolute; top:5px; left:5px; font-size:10px; font-family:var(--font-mono);
+  background:rgba(0,0,0,0.6); color:#fff; padding:2px 5px; border-radius:5px;
+  letter-spacing:0.02em;
+}
+.media-card .add-btn{
+  position:absolute; right:5px; bottom:5px; width:24px; height:24px; border-radius:50%;
+  border:none; background:var(--accent); color:var(--accent-ink); font-size:15px;
+  font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  box-shadow:0 1px 4px rgba(0,0,0,0.4);
+}
+.media-card .add-btn:hover{filter:brightness(1.08);}
+.media-card .dur-badge{
+  position:absolute; bottom:5px; left:5px; font-size:10px; font-family:var(--font-mono);
+  background:rgba(0,0,0,0.6); color:#fff; padding:2px 5px; border-radius:5px;
+}
+.library-empty{
+  padding:18px 14px; font-size:12.5px; color:var(--text-faint); line-height:1.5; margin:0;
+}
+
+.stage{flex:1 1 auto; display:flex; flex-direction:column; min-width:0; align-items:center; background:var(--bg);}
+.preview-wrap{flex:1 1 auto; display:flex; align-items:center; justify-content:center; width:100%; min-height:0; padding:16px;}
+.preview-frame{
+  position:relative; background:#000; border-radius:10px; overflow:hidden;
+  box-shadow:0 0 0 1px var(--border), 0 12px 30px rgba(0,0,0,0.35);
+  max-width:100%; max-height:100%;
+}
+.preview-frame canvas{display:block; max-width:100%; max-height:100%; width:auto; height:100%;}
+.preview-empty{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:8px; color:var(--text-faint); font-size:12.5px; text-align:center;
+  padding:20px;
+}
+.preview-empty b{color:var(--text-dim); font-family:var(--font-display); font-size:14px;}
+.text-handle{
+  position:absolute; border:1.5px dashed var(--accent2); border-radius:6px;
+  cursor:move; display:flex; align-items:center; justify-content:center;
+  background:rgba(69,199,184,0.08);
+}
+
+.transport{
+  display:flex; align-items:center; gap:10px; width:100%; max-width:720px;
+  padding:0 16px 14px; flex:0 0 auto;
+}
+.timecode{font-family:var(--font-mono); font-size:12.5px; color:var(--text); font-variant-numeric:tabular-nums; min-width:58px;}
+.timecode.dim{color:var(--text-faint); text-align:right;}
+#scrubber{flex:1 1 auto; accent-color:var(--accent);}
+.duck-toggle{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-dim); white-space:nowrap;}
+.duck-toggle input{accent-color:var(--accent);}
+
+/* ---------- inspector ---------- */
+.insp-section{padding:12px; border-bottom:1px solid var(--border-soft);}
+.insp-section:last-child{border-bottom:none;}
+.insp-title{font-family:var(--font-display); font-weight:700; font-size:12.5px; letter-spacing:0.02em; margin:0 0 10px; color:var(--text-dim); text-transform:uppercase;}
+.insp-empty{padding:30px 16px; color:var(--text-faint); font-size:12.5px; text-align:center; line-height:1.6;}
+.look-grid{display:grid; grid-template-columns:1fr 1fr; gap:7px;}
+.look-chip{
+  min-width:0; border:1.5px solid var(--border); border-radius:8px; padding:7px;
+  background:var(--panel-2); cursor:pointer; text-align:left;
+}
+.look-chip.selected{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
+.look-chip .swatch{height:30px; border-radius:5px; margin-bottom:5px;}
+.look-chip .lc-label{font-size:11.5px; font-weight:600; display:block;}
+.field-row{display:flex; flex-direction:column; gap:5px; margin-bottom:10px;}
+.field-row label{font-size:11.5px; color:var(--text-dim); display:flex; justify-content:space-between;}
+.field-row input[type="range"]{width:100%; accent-color:var(--accent);}
+.field-row input[type="text"], .field-row textarea, .field-row select, .field-row input[type="color"], .field-row input[type="number"]{
+  width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:7px;
+  padding:7px 8px; font-size:13px; color:var(--text);
+}
+.field-row textarea{resize:vertical; min-height:52px; font-family:inherit;}
+.row2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+.align-group{display:flex; gap:6px;}
+.align-group button{flex:1 1 auto; padding:6px 0; border:1px solid var(--border); background:var(--panel-2); color:var(--text); border-radius:6px; cursor:pointer; font-size:12px;}
+.align-group button.active{border-color:var(--accent); color:var(--accent);}
+
+/* ---------- timeline ---------- */
+.timeline-wrap{
+  flex:0 0 auto; border-top:1px solid var(--border); background:var(--bg-raised);
+  height:230px; display:flex; flex-direction:column;
+}
+.timeline-toolbar{
+  display:flex; align-items:center; gap:8px; padding:8px 14px;
+  border-bottom:1px solid var(--border-soft); flex:0 0 auto;
+}
+.timeline-toolbar .spacer{flex:1 1 auto;}
+.timeline-scroll{flex:1 1 auto; overflow-x:auto; overflow-y:hidden; position:relative; padding:8px 0 10px;}
+.timeline-ruler{height:18px; position:relative; margin-left:96px;}
+.timeline-ruler .tick{position:absolute; top:0; bottom:0; font-size:10px; font-family:var(--font-mono); color:var(--text-faint); border-left:1px solid var(--border-soft); padding-left:3px;}
+.timeline-ruler .beat-tick{position:absolute; top:0; height:7px; width:1.5px; background:var(--accent2); bottom:auto;}
+.music-clip .beat-mark{position:absolute; top:3px; bottom:3px; width:1px; background:rgba(255,255,255,0.55); pointer-events:none;}
+.track{display:flex; align-items:stretch; height:52px; margin-top:4px; position:relative;}
+.track-label{
+  width:96px; flex:0 0 auto; display:flex; align-items:center; gap:6px; font-size:11px;
+  color:var(--text-dim); padding:0 10px; position:sticky; left:0; background:var(--bg-raised); z-index:3;
+  font-weight:600;
+}
+.track-lane{position:relative; flex:1 1 auto; min-width:600px; border-radius:7px;}
+.track-video .track-lane{background:var(--track-video);}
+.track-text .track-lane{background:var(--track-text);}
+.track-music .track-lane{background:var(--track-music);}
+
+.clip{
+  position:absolute; top:4px; bottom:4px; border-radius:6px; overflow:hidden;
+  border:1.5px solid transparent; cursor:grab; display:flex; align-items:center;
+  background-size:cover; background-position:center;
+}
+.clip:active{cursor:grabbing;}
+.clip.selected{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
+.clip .clip-fill{
+  position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,0.1), rgba(0,0,0,0.55));
+}
+.clip .clip-name{position:relative; z-index:1; color:#fff; font-size:11px; padding:0 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none; text-shadow:0 1px 2px rgba(0,0,0,0.6);}
+.clip .trim-handle{
+  position:absolute; top:0; bottom:0; width:9px; background:rgba(255,255,255,0.18);
+  cursor:ew-resize; z-index:2;
+}
+.clip .trim-handle.left{left:0; border-radius:6px 0 0 6px;}
+.clip .trim-handle.right{right:0; border-radius:0 6px 6px 0;}
+.clip .trim-handle:hover{background:rgba(255,255,255,0.35);}
+.clip .transition-tag{
+  position:absolute; right:-1px; top:50%; transform:translateY(-50%); z-index:2;
+  font-size:9px; background:var(--accent2); color:#06201d; padding:1px 4px; border-radius:4px;
+  font-family:var(--font-mono);
+}
+.text-clip{background:#3a2f55;}
+.music-clip{background:#1f4a39;}
+.music-clip .wave{position:absolute; inset:4px 9px; display:flex; align-items:center; gap:1px; opacity:0.5;}
+.music-clip .wave span{flex:1 1 auto; background:#bfe9d6; border-radius:1px;}
+
+.playhead{
+  position:absolute; top:0; bottom:0; width:2px; background:var(--accent);
+  left:96px; z-index:5; pointer-events:none;
+}
+.playhead::before{
+  content:""; position:absolute; top:0; left:-5px; width:12px; height:10px;
+  background:var(--accent); border-radius:2px;
+}
+.empty-track-hint{position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:11px; color:var(--text-faint); pointer-events:none;}
+
+/* ---------- modal + toast ---------- */
+.modal-backdrop{
+  position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex; align-items:center;
+  justify-content:center; z-index:50; padding:20px;
+}
+.modal{
+  background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:22px;
+  width:380px; max-width:100%;
+}
+.modal h2{font-family:var(--font-display); font-size:16px; margin:0 0 12px;}
+.modal p{font-size:12.5px; color:var(--text-dim); line-height:1.5; margin:0 0 14px;}
+.modal .progress-track{height:8px; border-radius:5px; background:var(--panel-2); overflow:hidden; margin-bottom:10px;}
+.modal .progress-fill{height:100%; width:0%; background:var(--accent); transition:width 0.15s linear;}
+.modal .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:4px;}
+
+.toast{
+  position:fixed; left:50%; bottom:max(20px, env(safe-area-inset-bottom,0px)); transform:translateX(-50%) translateY(8px);
+  background:var(--bg-raised); border:1px solid var(--border); color:var(--text);
+  padding:10px 16px; border-radius:9px; font-size:13px; z-index:60; box-shadow:0 8px 20px rgba(0,0,0,0.3);
+  opacity:0; transition:opacity 0.2s, transform 0.2s; display:flex; align-items:center; gap:10px;
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+@media (max-width:860px){
+  .panel-library{width:150px;}
+  .panel-inspector{width:220px;}
+}
+</style>
+
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">&#10022;</span>Cutting Room</div>
+    <div class="topbar-center field-inline">
+      Canvas
+      <select id="aspectSelect">
+        <option value="9:16">9:16 &middot; Reels / TikTok / Shorts</option>
+        <option value="1:1">1:1 &middot; Square</option>
+        <option value="16:9">16:9 &middot; Widescreen</option>
+      </select>
+    </div>
+    <span class="hint-strip" id="hintStrip"></span>
+    <div class="topbar-right">
+      <button id="exportBtn" class="btn btn-primary">Export video</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <aside class="panel panel-library">
+      <div class="panel-head">
+        Media
+        <button id="addMediaBtn" class="btn btn-small">+ Add</button>
+      </div>
+      <input type="file" id="fileInput" class="hidden-input" accept="image/*,video/*" multiple>
+      <p class="library-empty" id="libraryEmpty">Add photos and video clips here, then drag them onto the timeline (or tap the + on a thumbnail) to start building.</p>
+      <div class="library-grid" id="libraryGrid"></div>
+    </aside>
+
+    <main class="stage">
+      <div class="preview-wrap">
+        <div class="preview-frame" id="previewFrame">
+          <canvas id="previewCanvas" width="720" height="1280"></canvas>
+          <div class="preview-empty" id="previewEmpty">
+            <b>Your timeline is empty</b>
+            <span>Add a photo or video on the left, then drop it on the Video track below.</span>
+          </div>
+        </div>
+      </div>
+      <div class="transport">
+        <button id="playBtn" class="btn-icon" aria-label="Play">&#9654;</button>
+        <span class="timecode" id="timeNow">0:00.0</span>
+        <input type="range" id="scrubber" min="0" max="1000" value="0" aria-label="Playhead position">
+        <span class="timecode dim" id="timeTotal">0:00.0</span>
+        <label class="duck-toggle"><input type="checkbox" id="duckToggle" checked>Duck music under clip audio</label>
+      </div>
+    </main>
+
+    <aside class="panel panel-inspector" id="inspector">
+      <div class="insp-empty">Select a clip, caption, or the music track to edit it here.</div>
+    </aside>
+  </div>
+
+  <div class="timeline-wrap">
+    <div class="timeline-toolbar">
+      <button id="splitBtn" class="btn btn-small" disabled>&#9986; Split at playhead</button>
+      <button id="deleteClipBtn" class="btn btn-small btn-danger" disabled>Delete selected</button>
+      <button id="prevBeatBtn" class="btn btn-small" disabled title="Jump to previous bass hit">&#9664; beat</button>
+      <button id="nextBeatBtn" class="btn btn-small" disabled title="Jump to next bass hit">beat &#9654;</button>
+      <label class="duck-toggle" id="snapToggleWrap" style="display:none;"><input type="checkbox" id="snapToggle">Snap to bass hits</label>
+      <div class="spacer"></div>
+      <button id="addTextBtn" class="btn btn-small">+ Text</button>
+      <button id="addMusicBtn" class="btn btn-small">+ Music</button>
+      <input type="file" id="musicInput" class="hidden-input" accept="audio/*">
+    </div>
+    <div class="timeline-scroll" id="timelineScroll">
+      <div class="timeline-ruler" id="timelineRuler"></div>
+      <div class="track track-main">
+        <div class="track-label">&#127916; Video</div>
+        <div class="track-lane" id="laneMain"><span class="empty-track-hint" id="laneMainHint">drop media here</span></div>
+      </div>
+      <div class="track track-text">
+        <div class="track-label">&#128172; Text</div>
+        <div class="track-lane" id="laneText"></div>
+      </div>
+      <div class="track track-music">
+        <div class="track-label">&#127925; Music</div>
+        <div class="track-lane" id="laneMusic"></div>
+      </div>
+      <div class="playhead" id="playhead"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="exportBackdrop" hidden>
+  <div class="modal">
+    <h2 id="exportModalTitle">Export your video</h2>
+    <p id="exportModalBody">Rendering plays your whole timeline once in real time while it records, so export takes about as long as the finished video.</p>
+    <div class="progress-track"><div class="progress-fill" id="exportProgressFill"></div></div>
+    <p id="exportStatusLine" style="margin:0 0 4px;">&nbsp;</p>
+    <div class="modal-actions">
+      <button class="btn btn-small" id="exportCancelBtn">Cancel</button>
+      <button class="btn btn-small btn-primary" id="exportStartBtn">Start export</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toastMsg"></span></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================== constants ============================== */
+var PXPS = 50;                 // timeline pixels per second
+var MIN_CLIP_DUR = 0.2;
+var MAX_IMAGE_DUR = 30;
+var ASPECTS = { "9:16":{w:720,h:1280}, "1:1":{w:1080,h:1080}, "16:9":{w:1280,h:720} };
+var DEFAULT_IMAGE_DUR = 3;
+var DISPLAY_FONT = "Archivo, system-ui, sans-serif";
+
+var LOOKS = {
+  original:  { label:"Original",      blurb:"No grade — clean passthrough.",
+    f:{b:1,c:1,s:1,sep:0,h:0,g:0}, overlay:null },
+  auto:      { label:"Auto Light",    blurb:"Gentle, balanced lift.",
+    f:{b:1.08,c:1.1,s:1.08,sep:0,h:0,g:0}, overlay:null },
+  golden:    { label:"Golden Hour",   blurb:"Warm amber, late-afternoon light.",
+    f:{b:1.05,c:1.05,s:1.2,sep:0.18,h:-6,g:0}, overlay:{color:"#ff9d42",opacity:0.10,blend:"soft-light"} },
+  tealorange:{ label:"Teal & Orange", blurb:"Cool shadows, warm skin — blockbuster contrast.",
+    f:{b:1.02,c:1.18,s:1.25,sep:0,h:0,g:0}, overlay:{color:"#1fb6b6",opacity:0.08,blend:"color"} },
+  moody:     { label:"Moody Blue",    blurb:"Desaturated, cool, a little darker.",
+    f:{b:0.92,c:1.12,s:0.8,sep:0,h:8,g:0}, overlay:{color:"#1a2b4a",opacity:0.16,blend:"multiply"} },
+  clean:     { label:"Clean & Bright",blurb:"Airy, high-key, crisp whites.",
+    f:{b:1.14,c:0.95,s:1.05,sep:0,h:0,g:0}, overlay:null },
+  vintage:   { label:"Vintage Film",  blurb:"Faded contrast, warm halation.",
+    f:{b:1.0,c:0.88,s:0.78,sep:0.25,h:0,g:0}, overlay:{color:"#e8d9b0",opacity:0.12,blend:"overlay"} },
+  noir:      { label:"Noir",          blurb:"High-contrast black & white.",
+    f:{b:1.0,c:1.25,s:1,sep:0,h:0,g:1}, overlay:null },
+  pastel:    { label:"Pastel",        blurb:"Soft, light, muted candy colors.",
+    f:{b:1.1,c:0.85,s:0.75,sep:0.05,h:0,g:0}, overlay:{color:"#ffffff",opacity:0.08,blend:"normal"} }
+};
+var LOOK_KEYS = Object.keys(LOOKS);
+
+/* ============================== style presets ==============================
+   A preset bundles everything "Auto-edit" needs to style a project in one
+   click: a look/grade, a transition + length, a default clip pace (used to
+   auto-trim newly added clips), whether new clips should auto-snap their
+   edges to the music's bass hits, and the caption style new text should pick
+   up. We can't bundle actual licensed music tracks here (see the music panel
+   -- that still has to be the user's own file), so "music" in a preset only
+   means how it behaves (ducking/beat-snap), not which track plays. */
+var PRESETS = {
+  cinematic: { label:"Cinematic", blurb:"Wide, warm, slow cuts.",
+    look:"tealorange", intensity:80, transition:"crossfade", transitionDur:0.6, pace:4.0, snapBeats:false,
+    caption:{ fontSize:56, color:"#ffffff", align:"center", bg:true, anim:"fade" } },
+  fastcut: { label:"Fast-Cut Reel", blurb:"Short punchy clips, beat-synced.",
+    look:"clean", intensity:70, transition:"slide", transitionDur:0.3, pace:1.2, snapBeats:true,
+    caption:{ fontSize:64, color:"#ffffff", align:"center", bg:false, anim:"pop" } },
+  vlog: { label:"Vlog", blurb:"Natural light, easy pacing.",
+    look:"auto", intensity:60, transition:"crossfade", transitionDur:0.4, pace:3.0, snapBeats:false,
+    caption:{ fontSize:44, color:"#ffffff", align:"left", bg:true, anim:"fade" } },
+  travel: { label:"Travel Montage", blurb:"Golden-hour warmth, beat-synced.",
+    look:"golden", intensity:85, transition:"crossfade", transitionDur:0.7, pace:2.5, snapBeats:true,
+    caption:{ fontSize:52, color:"#ffffff", align:"center", bg:false, anim:"fade" } },
+  moody: { label:"Moody Night", blurb:"Cool shadows, deliberate slides.",
+    look:"moody", intensity:75, transition:"slide", transitionDur:0.5, pace:2.8, snapBeats:false,
+    caption:{ fontSize:48, color:"#ffffff", align:"center", bg:true, anim:"pop" } },
+  noirkit: { label:"Noir", blurb:"High-contrast black & white.",
+    look:"noir", intensity:100, transition:"crossfade", transitionDur:0.5, pace:3.2, snapBeats:false,
+    caption:{ fontSize:48, color:"#ffffff", align:"center", bg:false, anim:"fade" } }
+};
+var PRESET_KEYS = Object.keys(PRESETS);
+
+/* ============================== state ============================== */
+var state = {
+  aspect: "9:16",
+  cw: 720, ch: 1280,
+  media: [],      // library items
+  clips: [],      // main track (sequential)
+  texts: [],      // text overlay track
+  music: null,    // single music slot or null
+  selection: null, // {type:'clip'|'text'|'music', id}
+  playhead: 0,
+  totalDuration: 0,
+  playing: false,
+  duck: true,
+  snapToBeats: false,
+  autoEdit: true,       // auto-add new uploads to the timeline and style them
+  activePreset: "none", // "none" or a key into PRESETS
+  autoFix: true,        // auto-correct exposure/white-balance/glare on every new clip
+  customPresets: [],    // imported .cube LUTs and .xmp (Lightroom) presets
+  audioCtx: null,
+  recordingDest: null,
+  exporting: false
+};
+
+/* ============================== dom refs ============================== */
+var els = {};
+["fileInput","addMediaBtn","libraryGrid","libraryEmpty","aspectSelect","hintStrip",
+ "previewCanvas","previewFrame","previewEmpty","playBtn","scrubber","timeNow","timeTotal","duckToggle",
+ "inspector","timelineScroll","timelineRuler","laneMain","laneMainHint","laneText","laneMusic","playhead",
+ "splitBtn","deleteClipBtn","prevBeatBtn","nextBeatBtn","snapToggleWrap","snapToggle","addTextBtn","addMusicBtn","musicInput","exportBtn",
+ "exportBackdrop","exportStartBtn","exportCancelBtn","exportProgressFill","exportStatusLine","exportModalBody",
+ "toast","toastMsg"
+].forEach(function(id){ els[id] = document.getElementById(id); });
+
+var ctx = els.previewCanvas.getContext("2d");
+
+/* ============================== small utils ============================== */
+function uid(){ return "id" + Math.random().toString(36).slice(2) + Date.now().toString(36); }
+function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+function fmtTime(sec){
+  if (!isFinite(sec) || sec < 0) sec = 0;
+  var m = Math.floor(sec/60); var s = sec - m*60;
+  return m + ":" + (s<10?"0":"") + s.toFixed(1);
+}
+var toastTimer = null;
+function toast(msg){
+  els.toastMsg.textContent = msg;
+  els.toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ els.toast.classList.remove("show"); }, 2800);
+}
+function getMedia(id){ for (var i=0;i<state.media.length;i++){ if (state.media[i].id===id) return state.media[i]; } return null; }
+
+/* ============================== look engine ============================== */
+function lerp(a,b,k){ return a + (b-a)*k; }
+function buildFilterString(lookKey, intensity){
+  var look = LOOKS[lookKey] || LOOKS.original;
+  var k = clamp(intensity,0,100)/100;
+  var f = look.f;
+  var b = lerp(1, f.b, k), c = lerp(1, f.c, k), s = lerp(1, f.s, k);
+  var sep = lerp(0, f.sep, k), h = lerp(0, f.h, k), g = lerp(0, f.g, k);
+  return "brightness(" + b.toFixed(3) + ") contrast(" + c.toFixed(3) + ") saturate(" + s.toFixed(3) +
+         ") sepia(" + sep.toFixed(3) + ") hue-rotate(" + h.toFixed(1) + "deg) grayscale(" + g.toFixed(3) + ")";
+}
+/* ============================== color adjustments (pro tools / auto-fix) ==============================
+   A clip's `adjust` block is a second, independent layer of color control on
+   top of its Look -- the kind of per-shot exposure/white-balance nudge every
+   real NLE and raw editor offers, and what auto-fix (below) writes into
+   automatically when a clip is added. Exposure/contrast/temp/tint/saturation
+   fold cheaply into the existing CSS filter pipeline (GPU-accelerated, free
+   every frame); highlights/shadows/whites/blacks need actual per-tone-range
+   remapping that CSS filters can't express, so those -- and any imported
+   LUT -- go through a real per-pixel pass instead (see needsPixelPass /
+   applyPixelPass), which costs more and is only paid by clips that actually
+   use it. */
+var ADJUST_KEYS = ["exposure","contrast","highlights","shadows","whites","blacks","temp","tint","saturation"];
+function isNeutralAdjust(a){
+  if (!a) return true;
+  for (var i=0;i<ADJUST_KEYS.length;i++){ if (Math.abs(a[ADJUST_KEYS[i]]||0) > 0.5) return false; }
+  return true;
+}
+// Composes the clip's Look filter with the CSS-expressible part of its
+// manual adjustments (exposure/contrast/temp/tint/saturation). Temperature
+// and tint are approximated with sepia/hue-rotate -- CSS has no real
+// per-channel white-balance control -- so this is a reasonable "looks
+// warmer/cooler" nudge, not a true color-science white balance.
+function buildClipFilterString(clip){
+  var look = LOOKS[clip.look] || LOOKS.original;
+  var k = clamp(clip.intensity,0,100)/100;
+  var f = look.f;
+  var a = clip.adjust || {};
+  var b = lerp(1, f.b, k) * (1 + (a.exposure||0)/100*0.5);
+  var c = lerp(1, f.c, k) * (1 + (a.contrast||0)/100*0.6);
+  var s = lerp(1, f.s, k) * (1 + (a.saturation||0)/100*0.8);
+  var sep = lerp(0, f.sep, k) + Math.max(0,(a.temp||0)/100)*0.3;
+  var h = lerp(0, f.h, k) + Math.min(0,(a.temp||0)/100)*18 + (a.tint||0)/100*8;
+  var g = lerp(0, f.g, k);
+  return "brightness(" + clamp(b,0,3).toFixed(3) + ") contrast(" + clamp(c,0,3).toFixed(3) + ") saturate(" + clamp(s,0,3).toFixed(3) +
+         ") sepia(" + clamp(sep,0,1).toFixed(3) + ") hue-rotate(" + h.toFixed(1) + "deg) grayscale(" + clamp(g,0,1).toFixed(3) + ")";
+}
+// Whether this clip needs the slower per-pixel pass at all -- true only if
+// it has a real tone-range adjustment (highlights/shadows/whites/blacks) or
+// an imported LUT attached. Most clips never touch either, so most clips
+// keep paying nothing beyond the free CSS filter above.
+function needsPixelPass(clip){
+  var a = clip.adjust;
+  if (a && (Math.abs(a.highlights||0)>0.5 || Math.abs(a.shadows||0)>0.5 || Math.abs(a.whites||0)>0.5 || Math.abs(a.blacks||0)>0.5)) return true;
+  if (clip.lutId && getCustomPreset(clip.lutId)) return true;
+  return false;
+}
+function getCustomPreset(id){
+  for (var i=0;i<state.customPresets.length;i++){ if (state.customPresets[i].id===id) return state.customPresets[i]; }
+  return null;
+}
+// A single 0..255 -> 0..255 tone curve built from the four tone-range
+// sliders, each weighted toward the part of the tonal range it names (a
+// shadow lift barely touches the highlights and vice versa) via a power
+// falloff -- the same shape (if not the same math) every raw editor uses
+// for these four controls.
+function buildToneLUT(adjust){
+  var lut = new Uint8ClampedArray(256);
+  var hi = (adjust.highlights||0)/100, sh = (adjust.shadows||0)/100;
+  var wh = (adjust.whites||0)/100, bl = (adjust.blacks||0)/100;
+  for (var i=0;i<256;i++){
+    var x = i/255, y = x;
+    y += sh*0.35*Math.pow(1-x,1.5)*(x<0.6?1:0.3);
+    y += hi*0.35*Math.pow(x,1.5)*(x>0.4?1:0.3);
+    y += wh*0.25*Math.pow(x,3);
+    y += bl*0.25*Math.pow(1-x,3);
+    lut[i] = clamp(Math.round(y*255),0,255);
+  }
+  return lut;
+}
+// Trilinear sample of an imported 3D color LUT, applied in place over an
+// ImageData's pixel buffer. This is the one genuinely expensive per-pixel
+// operation in the app -- see the benchmark note where it's called.
+function apply3DLutInPlace(pixels, lut){
+  var N = lut.size, max = N-1, d = lut.data;
+  var NN = N*N;
+  for (var i=0;i<pixels.length;i+=4){
+    var rf = (pixels[i]/255)*max, gf = (pixels[i+1]/255)*max, bf = (pixels[i+2]/255)*max;
+    var r0 = rf|0, g0 = gf|0, b0 = bf|0;
+    var r1 = r0<max?r0+1:max, g1 = g0<max?g0+1:max, b1 = b0<max?b0+1:max;
+    var fr = rf-r0, fg = gf-g0, fb = bf-b0;
+    var i000=(r0+g0*N+b0*NN)*3, i100=(r1+g0*N+b0*NN)*3, i010=(r0+g1*N+b0*NN)*3, i110=(r1+g1*N+b0*NN)*3;
+    var i001=(r0+g0*N+b1*NN)*3, i101=(r1+g0*N+b1*NN)*3, i011=(r0+g1*N+b1*NN)*3, i111=(r1+g1*N+b1*NN)*3;
+    var fr1=1-fr, fg1=1-fg, fb1=1-fb;
+    for (var k=0;k<3;k++){
+      var c00 = d[i000+k]*fr1 + d[i100+k]*fr;
+      var c10 = d[i010+k]*fr1 + d[i110+k]*fr;
+      var c01 = d[i001+k]*fr1 + d[i101+k]*fr;
+      var c11 = d[i011+k]*fr1 + d[i111+k]*fr;
+      var c0 = c00*fg1 + c10*fg;
+      var c1 = c01*fg1 + c11*fg;
+      var out = c0*fb1 + c1*fb;
+      pixels[i+k] = clamp(Math.round(out*255),0,255);
+    }
+  }
+}
+// Applies whichever per-pixel passes this clip actually needs to a scratch
+// canvas already holding its drawn (CSS-filtered) frame.
+function applyPixelPass(sctx, w, h, clip){
+  var id = sctx.getImageData(0,0,w,h);
+  var px = id.data;
+  if (clip.adjust && (Math.abs(clip.adjust.highlights||0)>0.5 || Math.abs(clip.adjust.shadows||0)>0.5 || Math.abs(clip.adjust.whites||0)>0.5 || Math.abs(clip.adjust.blacks||0)>0.5)){
+    var toneLUT = buildToneLUT(clip.adjust);
+    for (var i=0;i<px.length;i+=4){ px[i]=toneLUT[px[i]]; px[i+1]=toneLUT[px[i+1]]; px[i+2]=toneLUT[px[i+2]]; }
+  }
+  var preset = clip.lutId ? getCustomPreset(clip.lutId) : null;
+  if (preset && preset.kind === "lut" && preset.lut){ apply3DLutInPlace(px, preset.lut); }
+  sctx.putImageData(id,0,0);
+}
+var _scratch = null;
+function ensureScratchCanvas(){
+  if (!_scratch || _scratch.canvas.width !== state.cw || _scratch.canvas.height !== state.ch){
+    var c = (_scratch && _scratch.canvas) || document.createElement("canvas");
+    c.width = state.cw; c.height = state.ch;
+    _scratch = { canvas:c, ctx:c.getContext("2d", {willReadFrequently:true}) };
+  }
+  return _scratch;
+}
+// A quick, honest heuristic for "this shot looks off" -- not real computer
+// vision, just a downsampled histogram read: how dark/bright it runs
+// overall, whether one color channel dominates (a warm or cool cast), and
+// how much of the frame is blown out near-white (the signature of sun glare
+// or a blazing sky). Each maps to a small, capped nudge in the same
+// exposure/temp/tint/highlights sliders a person would reach for by hand --
+// auto-fix is just this heuristic applied the moment a clip is added.
+function computeAutoFix(el, nw, nh){
+  var out = { exposure:0, contrast:0, highlights:0, shadows:0, whites:0, blacks:0, temp:0, tint:0, saturation:0 };
+  if (!nw || !nh) return out;
+  try {
+    var sw = 64, sh = 64;
+    var c = document.createElement("canvas"); c.width = sw; c.height = sh;
+    var sctx = c.getContext("2d");
+    var scale = Math.max(sw/nw, sh/nh) || 1;
+    var dw = nw*scale, dh = nh*scale;
+    sctx.drawImage(el, (sw-dw)/2, (sh-dh)/2, dw, dh);
+    var data = sctx.getImageData(0,0,sw,sh).data;
+    var n = sw*sh, rSum=0,gSum=0,bSum=0, lumSum=0, blownCount=0;
+    for (var i=0;i<data.length;i+=4){
+      var r=data[i], g=data[i+1], b=data[i+2];
+      rSum+=r; gSum+=g; bSum+=b;
+      var lum = 0.2126*r+0.7152*g+0.0722*b;
+      lumSum += lum;
+      if (lum > 244 && Math.max(r,g,b)-Math.min(r,g,b) < 30) blownCount++;
+    }
+    var meanLum = lumSum/n;
+    var rMean=rSum/n, gMean=gSum/n, bMean=bSum/n, avg=(rMean+gMean+bMean)/3 || 1;
+    var blownFrac = blownCount/n;
+
+    // Gentle auto-exposure: nudge toward a mid-gray-ish target, capped so a
+    // deliberately dark or bright shot doesn't get flattened out.
+    out.exposure = clamp((128-meanLum)/128*45, -35, 35);
+    // Gray-world white balance: if red or blue dominates, correct the
+    // opposite way (this is `temp`'s sign flipped from the cast itself).
+    out.temp = clamp(-((rMean-bMean)/avg)*70, -30, 30);
+    out.tint = clamp(-((gMean-(rMean+bMean)/2)/avg)*70, -20, 20);
+    // Blown-out, low-saturation highlights read as glare/overexposed sky --
+    // pull just the highlights down rather than the whole image.
+    if (blownFrac > 0.08){
+      out.highlights = clamp(-blownFrac*180, -55, -10);
+      out.contrast = -6;
+    }
+  } catch(e){ /* leave neutral on any failure (e.g. a tainted canvas) */ }
+  return out;
+}
+// Parses a standard .cube 3D LUT (the format LUTs are sold/shared in across
+// Premiere, Final Cut, DaVinci, and photo tools alike) into a flat lookup
+// table. Ignores DOMAIN_MIN/MAX (almost always the default 0..1) and any
+// 1D-LUT section -- good enough for the vast majority of real-world files.
+function parseCubeLUT(text){
+  var lines = text.split(/\r?\n/);
+  var size = 0, data = [];
+  for (var i=0;i<lines.length;i++){
+    var line = lines[i].trim();
+    if (!line || line[0] === "#") continue;
+    if (/^LUT_3D_SIZE/i.test(line)){ size = parseInt(line.split(/\s+/)[1], 10); continue; }
+    if (/^[A-Z_0-9]+\s/.test(line) && !/^-?\d/.test(line)) continue; // other header keywords
+    var parts = line.split(/\s+/).map(Number);
+    if (parts.length === 3 && parts.every(function(n){ return !isNaN(n); })){ data.push(parts[0], parts[1], parts[2]); }
+  }
+  if (!size || data.length < size*size*size*3){
+    throw new Error("unexpected .cube format — no LUT_3D_SIZE, or not enough data rows");
+  }
+  return { size: size, data: new Float32Array(data) };
+}
+// Best-effort read of a Lightroom/Camera Raw .xmp preset's basic develop
+// sliders (crs: namespace), mapped onto the same adjust fields the manual
+// sliders use. This approximates the preset's main tone/color moves; it
+// does not replicate Adobe's actual tone-curve math, split toning, color
+// grading wheels, or any local (masked) adjustments -- there's no way to
+// get those pixel-identical without Adobe's own proprietary engine, so this
+// is deliberately the honest ceiling rather than a fake exact match.
+function parseXMPPreset(text){
+  var out = { exposure:0, contrast:0, highlights:0, shadows:0, whites:0, blacks:0, temp:0, tint:0, saturation:0 };
+  function num(tag){
+    var m = text.match(new RegExp("crs:"+tag+'="(-?[\\d.]+)"')) || text.match(new RegExp("<crs:"+tag+">(-?[\\d.]+)</crs:"+tag+">"));
+    return m ? parseFloat(m[1]) : null;
+  }
+  var exposure = num("Exposure2012");     if (exposure   != null) out.exposure   = clamp(exposure*20, -100, 100);
+  var contrast = num("Contrast2012");     if (contrast   != null) out.contrast   = clamp(contrast, -100, 100);
+  var highlights = num("Highlights2012"); if (highlights != null) out.highlights = clamp(highlights, -100, 100);
+  var shadows = num("Shadows2012");       if (shadows    != null) out.shadows    = clamp(shadows, -100, 100);
+  var whites = num("Whites2012");         if (whites     != null) out.whites     = clamp(whites, -100, 100);
+  var blacks = num("Blacks2012");         if (blacks     != null) out.blacks     = clamp(blacks, -100, 100);
+  var sat = num("Saturation"), vib = num("Vibrance");
+  if (sat != null || vib != null) out.saturation = clamp((sat||0) + (vib||0)*0.5, -100, 100);
+  var temp = num("Temperature"); if (temp != null) out.temp = clamp((temp-6500)/50, -100, 100);
+  var tint = num("Tint");        if (tint != null) out.tint = clamp(tint/1.5, -100, 100);
+  if ([exposure,contrast,highlights,shadows,whites,blacks,sat,vib,temp,tint].every(function(v){ return v==null; })){
+    throw new Error("couldn't find any recognizable Lightroom develop settings in this file");
+  }
+  return out;
+}
+
+/* ============================== media ingestion ============================== */
+function humanSize(bytes){
+  if (bytes > 1e6) return (bytes/1e6).toFixed(1)+" MB";
+  return Math.round(bytes/1e3)+" KB";
+}
+// A simple, honest "how visually busy is this frame" heuristic -- contrast
+// (how much luminance varies across the frame) plus average saturation.
+// This is pixel math, not real scene understanding: it can't tell a
+// beautiful sunset from a parking lot, but a bold, punchy, high-contrast
+// shot reliably scores higher than a flat/washed-out one, which is enough
+// to pick a reasonable opening "hook" shot and rough out energy over a
+// batch of clips without needing any kind of AI analysis.
+function computeVisualScore(el, nw, nh){
+  if (!nw || !nh) return 0;
+  try {
+    var sw = 48, sh = 48;
+    var c = document.createElement("canvas"); c.width = sw; c.height = sh;
+    var sctx = c.getContext("2d");
+    var scale = Math.max(sw/nw, sh/nh) || 1;
+    var dw = nw*scale, dh = nh*scale;
+    sctx.drawImage(el, (sw-dw)/2, (sh-dh)/2, dw, dh);
+    var data = sctx.getImageData(0,0,sw,sh).data;
+    var n = sw*sh, lumSum=0, lumSqSum=0, satSum=0;
+    for (var i=0;i<data.length;i+=4){
+      var r=data[i], g=data[i+1], b=data[i+2];
+      var lum = 0.2126*r+0.7152*g+0.0722*b;
+      lumSum += lum; lumSqSum += lum*lum;
+      var mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+      satSum += mx===0 ? 0 : (mx-mn)/mx;
+    }
+    var lumMean = lumSum/n;
+    var contrast = Math.sqrt(Math.max(0, lumSqSum/n - lumMean*lumMean))/128;
+    var saturation = satSum/n;
+    return contrast*0.65 + saturation*0.35;
+  } catch(e){ return 0; }
+}
+// Punchy opening lines for the auto-inserted "hook" caption, matched to each
+// preset's vibe so it doesn't feel bolted-on. Purely a starting point --
+// the caption is ordinary editable text once it's placed, and the inspector
+// offers a reshuffle for anyone who wants a different line.
+var HOOK_LINES = {
+  default:   ["Wait for it…", "You need to see this.", "Watch till the end.", "This changes everything.", "POV: you weren't ready for this."],
+  cinematic: ["Every story has a beginning.", "This is where it starts.", "Some moments stay with you.", "Watch closely."],
+  fastcut:   ["Wait for it 🔥", "This is INSANE.", "You won't believe this.", "POV: it gets wild.", "Okay but THIS part 👀"],
+  vlog:      ["Come with me for a sec.", "So this just happened…", "Day in my life, let's go.", "Okay, story time."],
+  travel:    ["Take me back already.", "This place broke me.", "Add this to your list.", "Pack your bags."],
+  moody:     ["Some nights hit different.", "This one's for the night owls.", "Stay a while.", "It gets better from here."],
+  noirkit:   ["Every city has its shadows.", "Some stories aren't black and white.", "Watch closely.", "This one's got layers."]
+};
+function pickHookLine(){
+  var pool = HOOK_LINES[state.activePreset] || HOOK_LINES.default;
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+// Auto-adds an attention-grabbing opening caption over a project's very
+// first clip -- only ever the first clip (so it reads as a cold-open hook,
+// not noise dropped into the middle of the edit) and only when the user
+// hasn't already placed a caption of their own.
+function maybeAddHookCaption(clip){
+  if (state.texts.length) return;
+  var preset = PRESETS[state.activePreset];
+  var cap = preset ? preset.caption : null;
+  var tc = {
+    id: uid(), text: pickHookLine(), start: clip.start, dur: clamp(clip.dur, 1.2, 2.5),
+    x: 0.5, y: 0.2,
+    fontSize: cap ? cap.fontSize : 56,
+    color: cap ? cap.color : "#ffffff",
+    bg: cap ? cap.bg : true,
+    align: cap ? cap.align : "center",
+    anim: cap ? cap.anim : "pop",
+    _isHook: true
+  };
+  state.texts.push(tc);
+  relayoutClips();
+}
+
+function addFiles(fileList){
+  var files = Array.prototype.slice.call(fileList).filter(function(file){
+    return file.type.indexOf("video") === 0 || file.type.indexOf("image") === 0;
+  });
+  if (!files.length) return;
+  // Auto-edit adds every file in this batch to the timeline, but each file
+  // becomes "ready" at its own pace (an image decodes almost instantly, a
+  // video needs its metadata and a thumbnail frame first) -- appending each
+  // one the moment IT finishes would scramble the order the user picked them
+  // in. So we wait for the whole batch and then append in upload order.
+  var batch = [];
+  var pending = files.length;
+  function itemSettled(){
+    pending--;
+    if (pending > 0) return;
+    if (!state.autoEdit) return;
+    var added = batch.filter(function(item){ return item.ready; });
+    if (!added.length) return;
+    // Pace the batch strongest-to-calmest by visual score, so whichever shot
+    // is boldest/most eye-catching leads -- the opening "hook" when the
+    // timeline was empty, or just a stronger lead-in otherwise. Only ties
+    // (or a batch of one) fall back to upload order.
+    var ordered = added.slice().sort(function(a,b){ return (b.visualScore||0) - (a.visualScore||0); });
+    ordered.forEach(function(item){ appendClip(item, state.clips.length); });
+    var preset = PRESETS[state.activePreset];
+    var what = added.length > 1 ? ("Added " + added.length + " clips, paced by how eye-catching each one is") : ('Added “' + added[0].name + '”');
+    toast(what + " to the timeline" + (preset ? " — styled as " + preset.label + "." : "."));
+  }
+  files.forEach(function(file){
+    var isVideo = file.type.indexOf("video") === 0;
+    var url = URL.createObjectURL(file);
+    var item = { id: uid(), kind: isVideo?"video":"image", name: file.name, size: file.size, objectURL: url, thumb: null, width: 0, height: 0, duration: isVideo? 0 : DEFAULT_IMAGE_DUR, ready: false };
+    state.media.push(item);
+    batch.push(item);
+    renderLibrary();
+    if (!isVideo){
+      var img = new Image();
+      img.onload = function(){
+        item.img = img; item.width = img.naturalWidth; item.height = img.naturalHeight; item.ready = true;
+        item.thumb = url;
+        item.visualScore = computeVisualScore(img, item.width, item.height);
+        item.autoFix = computeAutoFix(img, item.width, item.height);
+        renderLibrary();
+        itemSettled();
+      };
+      img.onerror = function(){ itemSettled(); };
+      img.src = url;
+    } else {
+      var v = document.createElement("video");
+      v.src = url; v.muted = true; v.preload = "metadata"; v.playsInline = true;
+      v.addEventListener("loadedmetadata", function(){
+        item.width = v.videoWidth; item.height = v.videoHeight; item.duration = v.duration || 0;
+        try { v.currentTime = Math.min(0.15, (v.duration||1)/2); } catch(e){}
+      });
+      v.addEventListener("seeked", function onSeek(){
+        var c = document.createElement("canvas");
+        c.width = 160; c.height = 160;
+        var tctx = c.getContext("2d");
+        var scale = Math.max(c.width/item.width, c.height/item.height) || 1;
+        var dw = item.width*scale, dh = item.height*scale;
+        try {
+          tctx.drawImage(v, (c.width-dw)/2, (c.height-dh)/2, dw, dh);
+          item.thumb = c.toDataURL("image/jpeg", 0.7);
+        } catch(e){}
+        item.visualScore = computeVisualScore(v, item.width, item.height);
+        item.autoFix = computeAutoFix(v, item.width, item.height);
+        item.ready = true;
+        renderLibrary();
+        v.removeEventListener("seeked", onSeek);
+        itemSettled();
+      });
+      v.addEventListener("error", function(){ itemSettled(); });
+      v.load();
+    }
+  });
+}
+
+/* ============================== library UI ============================== */
+function renderLibrary(){
+  els.libraryEmpty.hidden = state.media.length > 0;
+  els.libraryGrid.innerHTML = "";
+  state.media.forEach(function(item){
+    var card = document.createElement("div");
+    card.className = "media-card";
+    card.draggable = true;
+    card.title = item.name;
+    card.addEventListener("dragstart", function(e){
+      e.dataTransfer.setData("application/x-media-id", item.id);
+      e.dataTransfer.effectAllowed = "copy";
+    });
+    if (item.thumb){
+      var img = document.createElement("img");
+      img.src = item.thumb; img.alt = "";
+      card.appendChild(img);
+    }
+    var badge = document.createElement("span");
+    badge.className = "kind-badge";
+    badge.textContent = item.kind === "video" ? "VIDEO" : "PHOTO";
+    card.appendChild(badge);
+    if (item.kind === "video" && item.duration){
+      var dur = document.createElement("span");
+      dur.className = "dur-badge";
+      dur.textContent = fmtTime(item.duration);
+      card.appendChild(dur);
+    }
+    var addBtn = document.createElement("button");
+    addBtn.className = "add-btn"; addBtn.type = "button"; addBtn.textContent = "+";
+    addBtn.title = "Add to timeline";
+    addBtn.addEventListener("click", function(e){ e.stopPropagation(); appendClip(item, state.clips.length); });
+    card.appendChild(addBtn);
+    els.libraryGrid.appendChild(card);
+  });
+}
+
+/* ============================== main track clip model ============================== */
+function makeClip(media, index){
+  var trimEnd = media.kind === "video" ? (media.duration || 3) : DEFAULT_IMAGE_DUR;
+  var clip = {
+    id: uid(), mediaId: media.id, kind: media.kind,
+    trimStart: 0, trimEnd: trimEnd,
+    look: "original", intensity: 100, volume: 1,
+    transitionOut: { type: "none", dur: 0.6 },
+    start: 0, end: 0, el: null,
+    stabilize: false, _stabData: null, _stabToken: 0,
+    // Manual (and auto-fix-populated) tone/color adjustments, independent of
+    // the Look grid above -- see buildClipFilterString() and the tone-curve
+    // engine near needsPixelPass(). All neutral at 0; range is -100..100.
+    adjust: { exposure:0, contrast:0, highlights:0, shadows:0, whites:0, blacks:0, temp:0, tint:0, saturation:0 },
+    lutId: null,      // id into state.customPresets (a kind:"lut" entry), or null
+    _lastCustomPresetId: null, // id of the last kind:"xmp" preset applied, for the selected-chip highlight
+    autoFixed: false  // true once auto-fix has written into `adjust` for this clip
+  };
+  if (media.kind === "video"){
+    var v = document.createElement("video");
+    v.src = media.objectURL; v.preload = "auto"; v.playsInline = true; v.muted = false;
+    v.style.position = "absolute"; v.style.width = "1px"; v.style.height = "1px"; v.style.opacity = "0"; v.style.pointerEvents = "none";
+    document.body.appendChild(v);
+    clip.el = v;
+  }
+  return clip;
+}
+function appendClip(media, atIndex){
+  var clip = makeClip(media);
+  applyActivePresetToClip(clip, media);
+  applyAutoFixToClip(clip, media);
+  var wasEmpty = state.clips.length === 0;
+  state.clips.splice(clamp(atIndex,0,state.clips.length), 0, clip);
+  relayoutClips();
+  autoArrangeClipToBeat(clip);
+  if (wasEmpty) maybeAddHookCaption(clip);
+  selectEntity("clip", clip.id);
+  renderAll();
+  return clip;
+}
+
+// Copies the auto-fix heuristic already computed for this media item (at
+// upload time, see computeAutoFix) into the new clip's adjust block -- a
+// one-time stamp, same spirit as applyActivePresetToClip, so a freshly added
+// clip looks corrected immediately with no action needed. Marked autoFixed
+// so the inspector can say "auto-corrected" rather than implying the user
+// dialed these sliders in by hand; any manual tweak afterward just edits the
+// same values; state.autoFix off leaves the clip at neutral/default.
+function applyAutoFixToClip(clip, media){
+  if (!state.autoFix || !media || !media.autoFix) return;
+  ADJUST_KEYS.forEach(function(k){ clip.adjust[k] = media.autoFix[k] || 0; });
+  clip.autoFixed = true;
+}
+
+/* ============================== style presets: applying ============================== */
+// Styles a freshly-made clip with the active preset (look, transition, and a
+// pace-based trim) so every new clip -- auto-added or manually added with the
+// "+" button -- matches whatever the project's current style is. Does
+// nothing when no preset is selected, leaving makeClip()'s plain defaults.
+function applyActivePresetToClip(clip, media){
+  var preset = PRESETS[state.activePreset];
+  if (!preset) return;
+  clip.look = preset.look;
+  clip.intensity = preset.intensity;
+  clip.transitionOut = { type: preset.transition, dur: preset.transitionDur };
+  if (media && media.kind === "image"){
+    clip.trimEnd = clamp(preset.pace, MIN_CLIP_DUR, MAX_IMAGE_DUR);
+  } else if (media && media.kind === "video"){
+    var nat = media.duration || preset.pace;
+    clip.trimEnd = clamp(Math.min(preset.pace, nat), MIN_CLIP_DUR, nat);
+  }
+}
+// Restyles every clip already on the timeline to match a newly-picked preset
+// (look + transition only -- it won't silently re-trim clips you've already
+// adjusted by hand). Switching presets is meant to be a one-click "restyle
+// the whole project" action.
+function applyPresetToAll(key){
+  state.activePreset = key;
+  var preset = PRESETS[key];
+  if (preset){
+    state.clips.forEach(function(c){
+      c.look = preset.look; c.intensity = preset.intensity;
+      c.transitionOut = { type: preset.transition, dur: preset.transitionDur };
+    });
+    if (preset.snapBeats && beatTimelineTimes().length) state.snapToBeats = true;
+  }
+  relayoutClips();
+  renderAll();
+  toast(preset ? ('Applied "' + preset.label + '" to the whole project.') : "Preset cleared — new clips keep their own settings.");
+}
+// If bass hits have already been found in the music track, nudge a
+// newly-added clip's end onto the nearest one -- the same "cuts land on the
+// beat" behavior the right trim handle snaps to when you drag it by hand,
+// just applied automatically so auto-added clips don't need a manual nudge.
+function autoArrangeClipToBeat(clip){
+  if (!state.snapToBeats) return;
+  if (!beatTimelineTimes().length) return;
+  var preset = PRESETS[state.activePreset];
+  var catchDist = preset ? clamp(preset.pace*0.3, 0.15, 0.5) : 0.35;
+  var snapped = nearestBeatTime(clip.end, catchDist);
+  if (snapped != null && snapped - clip.start > MIN_CLIP_DUR){
+    clip.trimEnd = clip.trimStart + (snapped - clip.start);
+    relayoutClips();
+  }
+}
+
+function relayoutClips(){
+  var t = 0;
+  for (var i=0;i<state.clips.length;i++){
+    var clip = state.clips[i];
+    clip.start = t;
+    clip.dur = clip.trimEnd - clip.trimStart;
+    clip.end = clip.start + clip.dur;
+    var advance = clip.dur;
+    if (i < state.clips.length-1 && clip.transitionOut && clip.transitionOut.type !== "none"){
+      var nextDur = state.clips[i+1].trimEnd - state.clips[i+1].trimStart;
+      var overlap = Math.min(clip.transitionOut.dur, clip.dur*0.9, nextDur*0.9);
+      overlap = Math.max(overlap, 0);
+      clip._overlap = overlap;
+      advance = clip.dur - overlap;
+    } else {
+      clip._overlap = 0;
+    }
+    t += advance;
+  }
+  var mainEnd = t;
+  // While the music track is still "auto" (untouched since it was added --
+  // see _autoTrimmed), keep its length matched to the video track as that
+  // grows, capped at the song's own length. Without this, auto-arranging new
+  // clips onto the beat would quietly stop working again a few clips after
+  // music was added: the beat-snap list is limited to the music's current
+  // trim window (see beatTimelineTimes()), and that window used to be fixed
+  // at whatever the video's length happened to be the moment music was
+  // dropped in, never revisited as more clips arrived. The instant the user
+  // drags the music clip's own handles or body, this stops (wireFreeTrim /
+  // wireFreeMove clear the flag) and their manual trim is respected as-is.
+  if (state.music && state.music._autoTrimmed !== false && mainEnd > 0){
+    var cappedEnd = Math.min(state.music.naturalDuration || mainEnd, mainEnd);
+    if (cappedEnd > state.music.trimStart + MIN_CLIP_DUR) state.music.trimEnd = cappedEnd;
+  }
+  var textEnd = 0;
+  state.texts.forEach(function(tc){ textEnd = Math.max(textEnd, tc.start + tc.dur); });
+  var musicEnd = 0;
+  if (state.music) musicEnd = state.music.start + (state.music.trimEnd - state.music.trimStart);
+  state.totalDuration = Math.max(mainEnd, textEnd, musicEnd, 0.1);
+  state._mainEnd = mainEnd;
+  if (state.playhead > state.totalDuration) state.playhead = state.totalDuration;
+}
+
+function findActiveAt(tt){
+  var clips = state.clips;
+  if (!clips.length) return { curr:null };
+  var curr = null, idx = -1;
+  // A transition's whole premise is that clip i+1's start overlaps clip i's
+  // end (it starts before the previous clip is "done"). So we can't just
+  // take the LAST clip whose start <= tt -- during that overlap window the
+  // next clip's start has already passed, which would jump curr straight to
+  // it and skip the transition entirely (it'd never see next.start <= tt
+  // with curr still pointing at the earlier clip). Instead take the FIRST
+  // clip (in order) whose [start, end) actually contains tt; the last clip
+  // has no upper bound, so played-past-the-end still resolves to it.
+  for (var i=0;i<clips.length;i++){
+    var withinEnd = (i === clips.length-1) || (tt < clips[i].end - 1e-6);
+    if (clips[i].start <= tt + 1e-6 && withinEnd){ curr = clips[i]; idx = i; break; }
+  }
+  if (!curr){ curr = clips[0]; idx = 0; }
+  var next = clips[idx+1] || null;
+  if (next && curr.transitionOut && curr.transitionOut.type !== "none" && curr._overlap > 0 && tt >= next.start && tt < curr.end){
+    var denom = curr.end - next.start;
+    var p = denom > 0 ? (tt - next.start)/denom : 1;
+    return { curr:curr, next:next, overlapProgress: clamp(p,0,1) };
+  }
+  return { curr:curr, next:null };
+}
+
+/* ============================== canvas rendering ============================== */
+function drawCover(c, el, nw, nh, xOffset, yOffset, extraZoom){
+  if (!nw || !nh) return;
+  var scale = Math.max(state.cw/nw, state.ch/nh) * (1 + (extraZoom||0));
+  var dw = nw*scale, dh = nh*scale;
+  var dx = (state.cw-dw)/2 + (xOffset||0), dy = (state.ch-dh)/2 + (yOffset||0);
+  try { c.drawImage(el, dx, dy, dw, dh); } catch(e){}
+}
+// How wide a clip's media actually renders on screen once cover-fit-scaled to
+// the canvas. Needed for the slide transition: when a clip is zoomed well
+// beyond the canvas (e.g. a landscape source cover-cropped into a 9:16
+// canvas), its drawn width can be several times the canvas width, so a slide
+// offset sized to just the canvas width barely moves the image at all -- the
+// incoming clip already fully overlaps the canvas on frame one, and the
+// outgoing clip gets instantly painted over instead of visibly sliding out.
+function coverDrawWidth(media){
+  if (!media || !media.width || !media.height) return state.cw;
+  var scale = Math.max(state.cw/media.width, state.ch/media.height);
+  return media.width*scale;
+}
+function drawClipFrame(clip, localT, alpha, xOffset){
+  var media = getMedia(clip.mediaId);
+  if (!media) return;
+  var el = media.kind === "image" ? media.img : clip.el;
+  if (!el) return;
+  if (media.kind === "video" && el.readyState < 2) return;
+  var stabZoom = 0, stabDx = 0, stabDy = 0;
+  if (clip.stabilize && clip._stabData && clip._stabData.status === "done"){
+    var sd = clip._stabData;
+    stabZoom = sd.zoom;
+    var corr = sampleStabCorrection(sd, localT);
+    // Correction is stored as a fraction of the media's own natural
+    // dimensions so it stays correct regardless of canvas size/aspect; it
+    // has to be scaled up by the SAME factor drawCover uses internally
+    // (including the stabilization zoom itself) to land in canvas pixels.
+    var baseScale = Math.max(state.cw/media.width, state.ch/media.height) * (1+stabZoom);
+    stabDx = corr.dxFrac * media.width * baseScale;
+    stabDy = corr.dyFrac * media.height * baseScale;
+  }
+  var look = LOOKS[clip.look];
+  var filterStr = buildClipFilterString(clip);
+  if (!needsPixelPass(clip)){
+    // Fast path (the common case): draw straight to the visible canvas,
+    // exactly as before -- no extra allocation, no per-pixel JS loop.
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.filter = filterStr;
+    drawCover(ctx, el, media.width, media.height, (xOffset||0)+stabDx, stabDy, stabZoom);
+    ctx.filter = "none";
+    if (look && look.overlay){
+      var k1 = clip.intensity/100;
+      ctx.globalCompositeOperation = look.overlay.blend;
+      ctx.globalAlpha = alpha * look.overlay.opacity * k1;
+      ctx.fillStyle = look.overlay.color;
+      ctx.fillRect((xOffset||0), 0, state.cw, state.ch);
+      ctx.globalCompositeOperation = "source-over";
+    }
+    ctx.restore();
+  } else {
+    // This clip has a tone-range adjustment or an imported LUT, which CSS
+    // filters can't express -- render it to a same-size scratch canvas
+    // first, run the real per-pixel pass there, then composite the result
+    // onto the visible canvas with this call's alpha/offset. Isolating it
+    // to a scratch canvas (rather than processing the visible canvas in
+    // place) is what keeps this correct during a crossfade/slide, where two
+    // clips' drawClipFrame calls composite into the same frame -- without
+    // it, each clip's pixel pass would also reprocess whatever the other
+    // clip already drew.
+    // xOffset (and the stabilization offset) is baked in here, inside the
+    // scratch canvas, at the exact same canvas size/position as the main
+    // canvas -- NOT applied again when compositing below -- so a clip that
+    // overflows the frame (always true in cover-fit) slides and reveals the
+    // same way it would on the fast path, instead of sliding a smaller
+    // already-cropped snapshot around.
+    var sc = ensureScratchCanvas();
+    var sctx = sc.ctx;
+    sctx.clearRect(0,0,state.cw,state.ch);
+    sctx.save();
+    sctx.filter = filterStr;
+    drawCover(sctx, el, media.width, media.height, (xOffset||0)+stabDx, stabDy, stabZoom);
+    sctx.filter = "none";
+    if (look && look.overlay){
+      var k2 = clip.intensity/100;
+      sctx.globalCompositeOperation = look.overlay.blend;
+      sctx.globalAlpha = look.overlay.opacity * k2;
+      sctx.fillStyle = look.overlay.color;
+      sctx.fillRect((xOffset||0), 0, state.cw, state.ch);
+      sctx.globalCompositeOperation = "source-over";
+      sctx.globalAlpha = 1;
+    }
+    sctx.restore();
+    applyPixelPass(sctx, state.cw, state.ch, clip);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(sc.canvas, 0, 0);
+    ctx.restore();
+  }
+}
+function wrapLines(text, maxWidth){
+  var paragraphs = String(text||"").split("\n");
+  var lines = [];
+  paragraphs.forEach(function(p){
+    var words = p.split(" ");
+    var line = "";
+    words.forEach(function(w){
+      var test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxWidth && line){ lines.push(line); line = w; }
+      else line = test;
+    });
+    lines.push(line);
+  });
+  return lines;
+}
+function drawTextOverlay(tc, tt){
+  if (tt < tc.start || tt > tc.start + tc.dur) return;
+  var local = tc.dur > 0 ? (tt - tc.start)/tc.dur : 1;
+  var alpha = 1, scale = 1;
+  if (tc.anim === "fade"){
+    var fadeDur = Math.min(0.4, tc.dur/2);
+    var tSec = local*tc.dur;
+    if (tSec < fadeDur) alpha = tSec/fadeDur;
+    else if (tc.dur - tSec < fadeDur) alpha = (tc.dur-tSec)/fadeDur;
+  } else if (tc.anim === "pop"){
+    var popDur = 0.25, tSec2 = local*tc.dur;
+    if (tSec2 < popDur) scale = 0.7 + 0.3*(tSec2/popDur);
+  }
+  ctx.save();
+  ctx.globalAlpha = clamp(alpha,0,1);
+  var fs = tc.fontSize * (state.ch/1280);
+  ctx.font = "700 " + fs + "px " + DISPLAY_FONT;
+  ctx.textAlign = tc.align || "center";
+  ctx.textBaseline = "middle";
+  var cx = tc.x*state.cw, cy = tc.y*state.ch;
+  ctx.translate(cx,cy); ctx.scale(scale,scale); ctx.translate(-cx,-cy);
+  var maxW = state.cw*0.86;
+  var lines = wrapLines(tc.text, maxW);
+  var lh = fs*1.2;
+  var totalH = lh*lines.length;
+  if (tc.bg){
+    var widest = 0;
+    lines.forEach(function(l){ widest = Math.max(widest, ctx.measureText(l).width); });
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    var padX = fs*0.4, padY = fs*0.3;
+    var boxX = tc.align==="left" ? cx - padX : (tc.align==="right" ? cx-widest-padX : cx-widest/2-padX);
+    roundRect(ctx, boxX, cy-totalH/2-padY, widest+padX*2, totalH+padY*2, 10);
+    ctx.fill();
+  }
+  ctx.fillStyle = tc.color || "#ffffff";
+  ctx.strokeStyle = "rgba(0,0,0,0.6)";
+  ctx.lineWidth = fs*0.1;
+  ctx.lineJoin = "round";
+  lines.forEach(function(line,i){
+    var ly = cy - totalH/2 + lh*(i+0.5);
+    if (!tc.bg) ctx.strokeText(line, cx, ly);
+    ctx.fillText(line, cx, ly);
+  });
+  ctx.restore();
+}
+function roundRect(c,x,y,w,h,r){
+  c.beginPath();
+  c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r);
+  c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath();
+}
+
+function renderFrameAt(tt){
+  ctx.save(); ctx.fillStyle = "#000"; ctx.fillRect(0,0,state.cw,state.ch); ctx.restore();
+  var info = findActiveAt(tt);
+  if (info.curr){
+    if (info.next && info.overlapProgress != null){
+      var p = info.overlapProgress;
+      var style = info.curr.transitionOut.type;
+      var outLocal = clamp(info.curr.trimStart + (tt-info.curr.start), info.curr.trimStart, info.curr.trimEnd);
+      var inLocal = clamp(info.next.trimStart + (tt-info.next.start), info.next.trimStart, info.next.trimEnd);
+      if (style === "slide"){
+        // Travel distance is per-clip: each clip needs to move far enough that
+        // its own drawn edge clears the canvas edge, which is (cw+dw)/2 away
+        // from its centered rest position -- not a flat `cw`, which only
+        // works when the media's drawn width roughly matches the canvas.
+        var dwCurr = coverDrawWidth(getMedia(info.curr.mediaId));
+        var dwNext = coverDrawWidth(getMedia(info.next.mediaId));
+        var travelCurr = (state.cw + dwCurr)/2;
+        var travelNext = (state.cw + dwNext)/2;
+        drawClipFrame(info.curr, outLocal, 1, -p*travelCurr);
+        drawClipFrame(info.next, inLocal, 1, travelNext*(1-p));
+      } else {
+        drawClipFrame(info.curr, outLocal, 1-p, 0);
+        drawClipFrame(info.next, inLocal, p, 0);
+      }
+    } else {
+      var localT = clamp(info.curr.trimStart + (tt-info.curr.start), info.curr.trimStart, info.curr.trimEnd);
+      drawClipFrame(info.curr, localT, 1, 0);
+    }
+  }
+  state.texts.forEach(function(tc){ drawTextOverlay(tc, tt); });
+  els.previewEmpty.hidden = state.clips.length > 0;
+  positionTextHandle(tt);
+}
+
+/* ============================== media/audio sync during playback ============================== */
+function ensureAudioCtx(){
+  if (state.audioCtx) return state.audioCtx;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  state.audioCtx = new AC();
+  state.recordingDest = state.audioCtx.createMediaStreamDestination();
+  return state.audioCtx;
+}
+function ensureClipAudioNode(clip){
+  if (!clip.el || clip._audioWired) return;
+  try {
+    var ac = ensureAudioCtx();
+    var src = ac.createMediaElementSource(clip.el);
+    var gain = ac.createGain();
+    gain.gain.value = clip.volume;
+    src.connect(gain); gain.connect(ac.destination); gain.connect(state.recordingDest);
+    clip._gain = gain; clip._audioWired = true;
+  } catch(e){}
+}
+function ensureMusicAudioNode(){
+  if (!state.music || !state.music.el || state.music._audioWired) return;
+  try {
+    var ac = ensureAudioCtx();
+    var src = ac.createMediaElementSource(state.music.el);
+    var gain = ac.createGain();
+    gain.gain.value = state.music.volume;
+    src.connect(gain); gain.connect(ac.destination); gain.connect(state.recordingDest);
+    state.music._gain = gain; state.music._audioWired = true;
+  } catch(e){}
+}
+
+function requestRedrawOnSeeked(videoEl){
+  // Seeking a <video> is asynchronous: the frame at the new currentTime isn't
+  // necessarily decoded by the time we draw this tick, so a paused scrub can
+  // momentarily draw a stale (or not-yet-ready) frame. Redraw once the
+  // browser confirms the seek actually landed, using whatever the playhead
+  // is AT THAT TIME (not the possibly-stale value captured when we started
+  // seeking), so a second quick scrub still ends up showing the right frame.
+  function onSeeked(){
+    videoEl.removeEventListener("seeked", onSeeked);
+    if (!state.playing) renderFrameAt(state.playhead);
+  }
+  videoEl.addEventListener("seeked", onSeeked);
+}
+function syncMediaForTick(tt, playing){
+  var info = findActiveAt(tt);
+  var activeClips = [];
+  if (info.curr) activeClips.push(info.curr);
+  if (info.next) activeClips.push(info.next);
+  state.clips.forEach(function(clip){
+    if (clip.kind !== "video" || !clip.el) return;
+    var isActive = activeClips.indexOf(clip) !== -1;
+    if (isActive){
+      ensureClipAudioNode(clip);
+      if (clip._gain){
+        var g = clip.volume;
+        if (info.next && info.overlapProgress != null){
+          // Fade this clip's audio to match the visual crossfade/slide so the
+          // transition doesn't sound like both tracks playing at full volume.
+          if (clip === info.curr) g = clip.volume * (1 - info.overlapProgress);
+          else if (clip === info.next) g = clip.volume * info.overlapProgress;
+        }
+        clip._gain.gain.value = g;
+      }
+      var localT = clamp(clip.trimStart + (tt-clip.start), clip.trimStart, clip.trimEnd);
+      if (Math.abs(clip.el.currentTime - localT) > 0.25) {
+        try {
+          clip.el.currentTime = localT;
+          if (!playing) requestRedrawOnSeeked(clip.el);
+        } catch(e){}
+      }
+      if (playing){ if (clip.el.paused) clip.el.play().catch(function(){}); }
+      else if (!clip.el.paused) clip.el.pause();
+    } else if (!clip.el.paused){
+      clip.el.pause();
+    }
+  });
+  if (state.music && state.music.el){
+    var m = state.music;
+    var mActive = tt >= m.start && tt < m.start + (m.trimEnd - m.trimStart);
+    ensureMusicAudioNode();
+    if (mActive){
+      var mLocal = clamp(m.trimStart + (tt - m.start), m.trimStart, m.trimEnd);
+      if (Math.abs(m.el.currentTime - mLocal) > 0.25){ try { m.el.currentTime = mLocal; } catch(e){} }
+      if (playing){ if (m.el.paused) m.el.play().catch(function(){}); }
+      else if (!m.el.paused) m.el.pause();
+      if (m._gain){
+        var ducked = state.duck && info.curr && info.curr.kind === "video" && info.curr.volume > 0;
+        m._gain.gain.value = ducked ? m.volume*0.35 : m.volume;
+      }
+    } else if (!m.el.paused){
+      m.el.pause();
+    }
+  }
+}
+
+/* ============================== playback loop ============================== */
+var rafId = null, lastTs = null;
+function tick(ts){
+  if (!state.playing) return;
+  if (lastTs == null) lastTs = ts;
+  var dt = (ts - lastTs)/1000; lastTs = ts;
+  state.playhead = Math.min(state.totalDuration, state.playhead + dt);
+  syncMediaForTick(state.playhead, true);
+  renderFrameAt(state.playhead);
+  updateTransportUI();
+  updatePlayheadDom();
+  if (state.playhead >= state.totalDuration){ pausePlayback(); return; }
+  rafId = requestAnimationFrame(tick);
+}
+function playPlayback(){
+  if (state.playing) return;
+  if (!state.clips.length){ toast("Add something to the timeline first."); return; }
+  ensureAudioCtx().resume();
+  state.playing = true; lastTs = null;
+  els.playBtn.innerHTML = "&#10074;&#10074;";
+  rafId = requestAnimationFrame(tick);
+}
+function pausePlayback(){
+  state.playing = false;
+  if (rafId) cancelAnimationFrame(rafId); rafId = null;
+  els.playBtn.innerHTML = "&#9654;";
+  syncMediaForTick(state.playhead, false);
+}
+function updateTransportUI(){
+  els.timeNow.textContent = fmtTime(state.playhead);
+  els.timeTotal.textContent = fmtTime(state.totalDuration);
+  els.scrubber.value = state.totalDuration > 0 ? Math.round(state.playhead/state.totalDuration*1000) : 0;
+}
+function updatePlayheadDom(){
+  var x = 96 + state.playhead*PXPS;
+  els.playhead.style.left = x + "px";
+  var scroller = els.timelineScroll;
+  if (state.playing){
+    if (x < scroller.scrollLeft + 110) scroller.scrollLeft = Math.max(0, x-110);
+    if (x > scroller.scrollLeft + scroller.clientWidth - 60) scroller.scrollLeft = x - scroller.clientWidth + 110;
+  }
+}
+
+/* ============================== text overlay drag handle ============================== */
+var dragHandleEl = null;
+function positionTextHandle(tt){
+  var tc = state.selection && state.selection.type === "text" ? getText(state.selection.id) : null;
+  if (!tc || tt < tc.start || tt > tc.start+tc.dur){
+    if (dragHandleEl) dragHandleEl.hidden = true;
+    return;
+  }
+  if (!dragHandleEl){
+    dragHandleEl = document.createElement("div");
+    dragHandleEl.className = "text-handle";
+    els.previewFrame.appendChild(dragHandleEl);
+    dragHandleEl.addEventListener("pointerdown", function(e){
+      e.preventDefault();
+      var target = getText(state.selection.id);
+      if (!target) return;
+      dragHandleEl.setPointerCapture(e.pointerId);
+      var onMove = function(ev){
+        var rect = els.previewCanvas.getBoundingClientRect();
+        target.x = clamp((ev.clientX-rect.left)/rect.width, 0.05, 0.95);
+        target.y = clamp((ev.clientY-rect.top)/rect.height, 0.05, 0.95);
+        renderFrameAt(state.playhead);
+      };
+      var onUp = function(){
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    });
+  }
+  dragHandleEl.hidden = false;
+  var rect = els.previewCanvas.getBoundingClientRect();
+  var frameRect = els.previewFrame.getBoundingClientRect();
+  var w = Math.min(220, rect.width*0.6), h = 46;
+  dragHandleEl.style.left = (rect.left-frameRect.left + tc.x*rect.width - w/2) + "px";
+  dragHandleEl.style.top = (rect.top-frameRect.top + tc.y*rect.height - h/2) + "px";
+  dragHandleEl.style.width = w + "px";
+  dragHandleEl.style.height = h + "px";
+}
+
+/* ============================== selection + inspector ============================== */
+function getText(id){ for (var i=0;i<state.texts.length;i++){ if (state.texts[i].id===id) return state.texts[i]; } return null; }
+function getClip(id){ for (var i=0;i<state.clips.length;i++){ if (state.clips[i].id===id) return state.clips[i]; } return null; }
+function selectEntity(type, id){
+  state.selection = type ? { type:type, id:id } : null;
+  if (type === "text"){ var tc = getText(id); if (tc) state.playhead = tc.start; }
+  renderAll();
+}
+function deselectIfMissing(){
+  if (!state.selection) return;
+  if (state.selection.type === "clip" && !getClip(state.selection.id)) state.selection = null;
+  if (state.selection.type === "text" && !getText(state.selection.id)) state.selection = null;
+  if (state.selection.type === "music" && !state.music) state.selection = null;
+}
+
+function renderInspector(){
+  deselectIfMissing();
+  var box = els.inspector;
+  box.innerHTML = "";
+  box.appendChild(buildPresetSection());
+  box.appendChild(buildCustomPresetsSection());
+  if (!state.selection){
+    var empty = document.createElement("div");
+    empty.className = "insp-empty";
+    empty.textContent = "Select a clip, caption, or the music track to edit it here.";
+    box.appendChild(empty);
+    els.splitBtn.disabled = true; els.deleteClipBtn.disabled = true;
+    return;
+  }
+  els.deleteClipBtn.disabled = false;
+  if (state.selection.type === "clip"){
+    var clip = getClip(state.selection.id);
+    if (!clip) return;
+    els.splitBtn.disabled = !(state.playhead > clip.start+0.05 && state.playhead < clip.end-0.05);
+    box.appendChild(sectionEl("Look", buildLookGrid(clip)));
+    box.appendChild(sectionEl("Intensity", buildSlider("intensity", clip.intensity, 0, 100, 1, function(v){ clip.intensity=v; renderFrameAt(state.playhead); }, function(v){return v+"%";})));
+    box.appendChild(sectionEl("Color adjustments", buildAdjustControls(clip)));
+    if (clip.kind === "video"){
+      box.appendChild(sectionEl("Clip volume", buildSlider("vol", Math.round(clip.volume*100), 0, 100, 1, function(v){ clip.volume=v/100; if(clip._gain) clip._gain.gain.value=clip.volume; }, function(v){return v+"%";})));
+      box.appendChild(sectionEl("Stabilize", buildStabilizeControls(clip)));
+    }
+    box.appendChild(sectionEl("Transition to next clip", buildTransitionControls(clip)));
+    var info = document.createElement("div");
+    info.className = "field-row";
+    info.innerHTML = '<label>Duration<span>'+fmtTime(clip.dur)+'</span></label>';
+    var hint = document.createElement("p");
+    hint.style.margin = "6px 0 0"; hint.style.fontSize = "11.5px"; hint.style.color = "var(--text-faint)";
+    hint.textContent = "Drag the right edge to trim the end. To trim the start, move the playhead to the new in-point, Split, then delete the piece you don't want.";
+    info.appendChild(hint);
+    box.appendChild(sectionEl("Timing", info));
+  } else if (state.selection.type === "text"){
+    var tc = getText(state.selection.id);
+    if (!tc) return;
+    els.splitBtn.disabled = true;
+    box.appendChild(buildTextInspector(tc));
+  } else if (state.selection.type === "music"){
+    els.splitBtn.disabled = true;
+    box.appendChild(buildMusicInspector());
+  }
+}
+function sectionEl(title, contentEl){
+  var sec = document.createElement("div"); sec.className = "insp-section";
+  var h = document.createElement("div"); h.className = "insp-title"; h.textContent = title;
+  sec.appendChild(h); sec.appendChild(contentEl);
+  return sec;
+}
+/* ============================== style presets: UI ============================== */
+// Always-visible (not tied to a selection) so it's there the instant you add
+// media, which is the point: pick a preset once and everything after it --
+// new uploads and a one-click restyle of what's already there -- follows it.
+function buildPresetSection(){
+  var wrap = document.createElement("div");
+  var grid = document.createElement("div"); grid.className = "look-grid";
+  grid.appendChild(buildPresetChip("none", { label:"None", blurb:"No preset — style clips yourself." }));
+  PRESET_KEYS.forEach(function(key){ grid.appendChild(buildPresetChip(key, PRESETS[key])); });
+  wrap.appendChild(grid);
+
+  var autoRow = document.createElement("label");
+  autoRow.className = "duck-toggle"; autoRow.style.marginTop = "10px"; autoRow.style.cursor = "pointer";
+  var autoCb = document.createElement("input");
+  autoCb.type = "checkbox"; autoCb.id = "autoEditToggle"; autoCb.checked = state.autoEdit;
+  autoCb.addEventListener("change", function(){ state.autoEdit = autoCb.checked; });
+  autoRow.appendChild(autoCb);
+  autoRow.appendChild(document.createTextNode("Auto-add & style new uploads"));
+  wrap.appendChild(autoRow);
+
+  var fixRow = document.createElement("label");
+  fixRow.className = "duck-toggle"; fixRow.style.marginTop = "6px"; fixRow.style.cursor = "pointer";
+  var fixCb = document.createElement("input");
+  fixCb.type = "checkbox"; fixCb.id = "autoFixToggle"; fixCb.checked = state.autoFix;
+  fixCb.addEventListener("change", function(){ state.autoFix = fixCb.checked; });
+  fixRow.appendChild(fixCb);
+  fixRow.appendChild(document.createTextNode("Auto-fix exposure, white balance & glare on new clips"));
+  wrap.appendChild(fixRow);
+
+  var hint = document.createElement("p");
+  hint.style.margin = "8px 0 0"; hint.style.fontSize = "11.5px"; hint.style.color = "var(--text-faint)";
+  hint.textContent = state.activePreset !== "none"
+    ? "Styles every new clip automatically. Pick another preset any time to restyle the whole project at once — it won't re-trim clips you've already adjusted."
+    : "Pick a look to style every clip — current and new — the same way. (Music itself still has to be your own file; a preset only sets pacing and beat-snap for it.)";
+  wrap.appendChild(hint);
+
+  return sectionEl("Style preset", wrap);
+}
+function buildPresetChip(key, preset){
+  var chip = document.createElement("button");
+  chip.type = "button";
+  // preset-chip is an extra hook so project-wide presets and a single
+  // clip's per-clip Look grid (both styled as .look-chip) stay tellable
+  // apart in code/tests even though they look the same -- they do very
+  // different things (restyle the whole project vs. one clip).
+  chip.className = "look-chip preset-chip" + (state.activePreset === key ? " selected" : "");
+  chip.title = preset.blurb || "";
+  var sw = document.createElement("div"); sw.className = "swatch";
+  sw.style.background = "linear-gradient(135deg,#8a97a8,#4d5a6c)";
+  if (key !== "none") sw.style.filter = buildFilterString(preset.look, preset.intensity);
+  var lbl = document.createElement("span"); lbl.className = "lc-label"; lbl.textContent = preset.label;
+  chip.appendChild(sw); chip.appendChild(lbl);
+  chip.addEventListener("click", function(){ applyPresetToAll(key); });
+  return chip;
+}
+/* ============================== custom presets (imported LUTs / Lightroom) ============================== */
+// Always-visible, like the Style Preset section -- but these apply per-clip
+// (not project-wide), since a bought preset pack is usually meant for one
+// shot at a time, not a blanket restyle. Import once, then click any
+// imported preset while a clip is selected to apply it to that clip.
+function buildCustomPresetsSection(){
+  var wrap = document.createElement("div");
+  var importBtn = document.createElement("button");
+  importBtn.type = "button"; importBtn.className = "btn btn-small";
+  importBtn.textContent = "+ Import preset (.cube / .xmp)";
+  importBtn.addEventListener("click", importCustomPresetFiles);
+  wrap.appendChild(importBtn);
+
+  if (state.customPresets.length){
+    var grid = document.createElement("div"); grid.className = "look-grid"; grid.style.marginTop = "10px";
+    state.customPresets.forEach(function(preset){ grid.appendChild(buildCustomPresetChip(preset)); });
+    wrap.appendChild(grid);
+  }
+  var hint = document.createElement("p");
+  hint.style.margin = "8px 0 0"; hint.style.fontSize = "11.5px"; hint.style.color = "var(--text-faint)";
+  hint.textContent = (state.selection && state.selection.type === "clip")
+    ? "Click a preset to apply it to the selected clip. LUTs (.cube) render exactly; Lightroom presets (.xmp) are approximated from their basic tone/color sliders — split toning, tone curves, and local masks aren't replicated."
+    : "Import a .cube LUT or a Lightroom .xmp preset here, then select a clip on the timeline and click it to apply.";
+  wrap.appendChild(hint);
+  return sectionEl("Custom presets", wrap);
+}
+function buildCustomPresetChip(preset){
+  var clip = (state.selection && state.selection.type === "clip") ? getClip(state.selection.id) : null;
+  var applied = !!clip && ((preset.kind === "lut" && clip.lutId === preset.id) || (preset.kind === "xmp" && clip._lastCustomPresetId === preset.id));
+  var chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = "look-chip" + (applied ? " selected" : "");
+  chip.title = preset.kind === "lut" ? "Imported LUT (.cube)" : "Imported Lightroom preset (.xmp, approximated)";
+  var sw = document.createElement("div"); sw.className = "swatch";
+  sw.style.background = "linear-gradient(135deg,#8a97a8,#4d5a6c)";
+  var lbl = document.createElement("span"); lbl.className = "lc-label"; lbl.textContent = preset.name;
+  var tag = document.createElement("span");
+  tag.style.display = "block"; tag.style.fontSize = "9.5px"; tag.style.color = "var(--text-faint)"; tag.style.marginTop = "2px";
+  tag.textContent = preset.kind === "lut" ? "LUT" : "Lightroom (approx.)";
+  chip.appendChild(sw); chip.appendChild(lbl); chip.appendChild(tag);
+  chip.addEventListener("click", function(){ applyCustomPresetToSelection(preset); });
+  return chip;
+}
+function applyCustomPresetToSelection(preset){
+  if (!(state.selection && state.selection.type === "clip")){
+    toast("Select a clip on the timeline first, then click a preset to apply it.");
+    return;
+  }
+  var clip = getClip(state.selection.id);
+  if (!clip) return;
+  if (preset.kind === "lut"){
+    clip.lutId = preset.id;
+    clip.look = "original"; // avoid double-grading a built-in Look under an exact LUT
+    clip._lastCustomPresetId = null;
+  } else {
+    ADJUST_KEYS.forEach(function(k){ clip.adjust[k] = preset.adjust[k] || 0; });
+    clip.lutId = null;
+    clip._lastCustomPresetId = preset.id;
+    clip.autoFixed = false;
+  }
+  renderInspector();
+  renderFrameAt(state.playhead);
+  toast('Applied "' + preset.name + '" to this clip.');
+}
+function importCustomPresetFiles(){
+  var input = document.createElement("input");
+  input.type = "file"; input.accept = ".cube,.xmp,.xml,text/xml,application/xml"; input.multiple = true;
+  input.addEventListener("change", function(){
+    Array.prototype.slice.call(input.files).forEach(function(file){
+      var reader = new FileReader();
+      reader.onload = function(){
+        var name = file.name.replace(/\.[^.]+$/, "");
+        try {
+          var text = String(reader.result);
+          if (/\.cube$/i.test(file.name)){
+            var lut = parseCubeLUT(text);
+            state.customPresets.push({ id: uid(), name: name, kind: "lut", lut: lut });
+            toast('Imported LUT "' + name + '".');
+          } else {
+            var adjust = parseXMPPreset(text);
+            state.customPresets.push({ id: uid(), name: name, kind: "xmp", adjust: adjust });
+            toast('Imported Lightroom preset "' + name + '" (approximated).');
+          }
+          renderInspector();
+        } catch(e){
+          toast('Couldn’t read "' + name + '": ' + (e && e.message || e));
+        }
+      };
+      reader.onerror = function(){ toast('Couldn’t read "' + file.name + '".'); };
+      reader.readAsText(file);
+    });
+  });
+  input.click();
+}
+function buildLookGrid(clip){
+  var grid = document.createElement("div"); grid.className = "look-grid";
+  LOOK_KEYS.forEach(function(key){
+    var look = LOOKS[key];
+    var chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "look-chip" + (clip.look===key ? " selected":"");
+    chip.title = look.blurb;
+    var sw = document.createElement("div"); sw.className = "swatch";
+    sw.style.filter = buildFilterString(key,100);
+    sw.style.background = "linear-gradient(135deg,#8a97a8,#4d5a6c)";
+    var lbl = document.createElement("span"); lbl.className = "lc-label"; lbl.textContent = look.label;
+    chip.appendChild(sw); chip.appendChild(lbl);
+    chip.addEventListener("click", function(){ clip.look = key; renderInspector(); renderFrameAt(state.playhead); renderTimeline(); });
+    grid.appendChild(chip);
+  });
+  return grid;
+}
+function buildSlider(name, value, min, max, step, onChange, fmt){
+  var wrap = document.createElement("div"); wrap.className = "field-row";
+  var label = document.createElement("label");
+  var valSpan = document.createElement("span"); valSpan.textContent = fmt ? fmt(value) : value;
+  label.textContent = ""; label.appendChild(valSpan);
+  var input = document.createElement("input");
+  input.type = "range"; input.min=min; input.max=max; input.step=step; input.value=value;
+  input.id = "slider-"+name+"-"+uid();
+  input.addEventListener("input", function(){ var v=Number(input.value); valSpan.textContent = fmt?fmt(v):v; onChange(v); });
+  wrap.appendChild(label); wrap.appendChild(input);
+  return wrap;
+}
+// Nine tone/color sliders on top of the Look grid -- exposure/contrast/
+// temp/tint/saturation ride the free CSS filter path, highlights/shadows/
+// whites/blacks go through the real per-pixel tone curve (see
+// needsPixelPass/buildToneLUT). Auto-fix (computeAutoFix) pre-fills these
+// the moment a clip is added when it's turned on; this is just the same
+// values, editable.
+var ADJUST_LABELS = [
+  ["exposure","Exposure"], ["contrast","Contrast"], ["highlights","Highlights"], ["shadows","Shadows"],
+  ["whites","Whites"], ["blacks","Blacks"], ["temp","Temp"], ["tint","Tint"], ["saturation","Saturation"]
+];
+function buildAdjustControls(clip){
+  var wrap = document.createElement("div");
+  if (clip.autoFixed){
+    var note = document.createElement("p");
+    note.style.margin = "0 0 8px"; note.style.fontSize = "11.5px"; note.style.color = "var(--text-faint)";
+    note.textContent = "Auto-corrected on add (exposure, white balance, glare) — nudge further below if it's not quite right.";
+    wrap.appendChild(note);
+  }
+  ADJUST_LABELS.forEach(function(d){
+    var key = d[0], label = d[1];
+    var row = buildSlider("adj-"+key, clip.adjust[key]||0, -100, 100, 1, function(v){
+      clip.adjust[key] = v;
+      renderFrameAt(state.playhead);
+    }, function(v){ return (v>0?"+":"") + Math.round(v); });
+    row.querySelector("label").insertBefore(document.createTextNode(label), row.querySelector("label").firstChild);
+    wrap.appendChild(row);
+  });
+  var resetBtn = document.createElement("button");
+  resetBtn.type = "button"; resetBtn.className = "btn btn-small"; resetBtn.style.marginTop = "4px";
+  resetBtn.textContent = "Reset to neutral";
+  resetBtn.addEventListener("click", function(){
+    ADJUST_KEYS.forEach(function(k){ clip.adjust[k] = 0; });
+    clip.autoFixed = false;
+    clip.lutId = null;
+    clip._lastCustomPresetId = null;
+    renderInspector(); renderFrameAt(state.playhead);
+  });
+  wrap.appendChild(resetBtn);
+  return wrap;
+}
+function buildTransitionControls(clip){
+  var wrap = document.createElement("div");
+  var isLast = state.clips[state.clips.length-1] === clip;
+  if (isLast){
+    var p = document.createElement("p"); p.style.margin="0"; p.style.fontSize="12px"; p.style.color="var(--text-faint)";
+    p.textContent = "This is the last clip — no transition after it.";
+    wrap.appendChild(p);
+    return wrap;
+  }
+  var row = document.createElement("div"); row.className = "field-row";
+  var select = document.createElement("select");
+  [["none","Hard cut"],["crossfade","Crossfade"],["slide","Slide"]].forEach(function(o){
+    var opt = document.createElement("option"); opt.value=o[0]; opt.textContent=o[1];
+    if (clip.transitionOut.type===o[0]) opt.selected = true;
+    select.appendChild(opt);
+  });
+  select.addEventListener("change", function(){ clip.transitionOut.type = select.value; relayoutClips(); renderAll(); });
+  row.appendChild(select);
+  wrap.appendChild(row);
+  if (clip.transitionOut.type !== "none"){
+    wrap.appendChild(buildSlider("trans", clip.transitionOut.dur, 0.2, 1.5, 0.1, function(v){ clip.transitionOut.dur=v; relayoutClips(); renderAll(); }, function(v){return v.toFixed(1)+"s";}));
+  }
+  return wrap;
+}
+// Per-clip "smooth out camera shake" toggle. Checking it for the first time
+// kicks off analyzeStabilization() (see there); flipping it off just stops
+// the effect from being applied -- the analysis result stays cached so
+// turning it back on is instant. If the clip's trim has changed since it was
+// analyzed, the correction may no longer line up with what's on screen, so
+// we surface a re-analyze prompt instead of silently redoing the work.
+function buildStabilizeControls(clip){
+  var wrap = document.createElement("div");
+  var row = document.createElement("label"); row.className = "duck-toggle"; row.style.cursor = "pointer";
+  var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!clip.stabilize;
+  cb.addEventListener("change", function(){
+    clip.stabilize = cb.checked;
+    if (clip.stabilize && clipStabStatus(clip) !== "done" && clipStabStatus(clip) !== "working"){
+      analyzeStabilization(clip);
+    }
+    renderInspector();
+    renderFrameAt(state.playhead);
+  });
+  row.appendChild(cb);
+  row.appendChild(document.createTextNode("Smooth out camera shake"));
+  wrap.appendChild(row);
+
+  var statusP = document.createElement("p");
+  statusP.style.margin = "8px 0 0"; statusP.style.fontSize = "12.5px"; statusP.style.color = "var(--text-dim)";
+  var status = clipStabStatus(clip);
+  var showReanalyze = false;
+  if (status === "working"){
+    var pct = Math.round((clip._stabData.progress||0)*100);
+    statusP.innerHTML = '<span class="spinner" style="margin-right:6px;"></span>Analyzing motion… ' + pct + '%';
+  } else if (status === "done"){
+    var sd = clip._stabData;
+    var stale = sd.analyzedTrimStart !== clip.trimStart || sd.analyzedTrimEnd !== clip.trimEnd;
+    if (stale){
+      statusP.textContent = "Trim changed since this was analyzed — re-analyze for the best result.";
+      showReanalyze = true;
+    } else if (sd.zoom > 0.01){
+      statusP.textContent = "Smoothed — zoomed in " + Math.round(sd.zoom*100) + "% to hide the correction.";
+      showReanalyze = true;
+    } else {
+      statusP.textContent = "Smoothed — this clip barely needed any correction.";
+      showReanalyze = true;
+    }
+  } else if (status === "error"){
+    statusP.textContent = "Couldn't analyze this clip.";
+    showReanalyze = true;
+  } else if (status === "unsupported"){
+    statusP.textContent = "Stabilization isn't available for this clip.";
+  } else {
+    statusP.textContent = "Smooths out shaky handheld footage — best for small, fast jitter rather than a big sweeping pan.";
+  }
+  wrap.appendChild(statusP);
+
+  if (showReanalyze){
+    var redo = document.createElement("button");
+    redo.type = "button"; redo.className = "btn btn-small"; redo.style.marginTop = "6px";
+    redo.textContent = "Re-analyze";
+    redo.addEventListener("click", function(){ analyzeStabilization(clip); });
+    wrap.appendChild(redo);
+  }
+  return wrap;
+}
+function buildTextInspector(tc){
+  var wrap = document.createElement("div");
+  var s1 = document.createElement("div"); s1.className="insp-section";
+  s1.innerHTML = '<div class="insp-title">Caption</div>';
+  var ta = document.createElement("textarea");
+  ta.value = tc.text;
+  ta.addEventListener("input", function(){ tc.text = ta.value; renderFrameAt(state.playhead); });
+  s1.appendChild(ta);
+  if (tc._isHook){
+    var reshuffle = document.createElement("button");
+    reshuffle.type = "button"; reshuffle.className = "btn btn-small"; reshuffle.style.marginTop = "6px";
+    reshuffle.textContent = "🔀 Try another hook";
+    reshuffle.addEventListener("click", function(){
+      var next = pickHookLine();
+      // Avoid handing back the exact line that's already showing when the
+      // pool has other options, so a click always visibly changes something.
+      var pool = HOOK_LINES[state.activePreset] || HOOK_LINES.default;
+      if (pool.length > 1){ var tries=0; while (next === tc.text && tries<8){ next = pickHookLine(); tries++; } }
+      tc.text = next; ta.value = next;
+      renderFrameAt(state.playhead);
+    });
+    s1.appendChild(reshuffle);
+  }
+  wrap.appendChild(s1);
+
+  var s2 = document.createElement("div"); s2.className="insp-section";
+  s2.innerHTML = '<div class="insp-title">Style</div>';
+  var row2 = document.createElement("div"); row2.className = "row2";
+  var sizeWrap = document.createElement("div"); sizeWrap.className="field-row";
+  sizeWrap.innerHTML = "<label>Size</label>";
+  var sizeInput = document.createElement("input"); sizeInput.type="number"; sizeInput.min=16; sizeInput.max=140; sizeInput.value=tc.fontSize;
+  sizeInput.addEventListener("input", function(){ tc.fontSize = Number(sizeInput.value)||48; renderFrameAt(state.playhead); });
+  sizeWrap.appendChild(sizeInput);
+  var colorWrap = document.createElement("div"); colorWrap.className="field-row";
+  colorWrap.innerHTML = "<label>Color</label>";
+  var colorInput = document.createElement("input"); colorInput.type="color"; colorInput.value=tc.color;
+  colorInput.addEventListener("input", function(){ tc.color = colorInput.value; renderFrameAt(state.playhead); });
+  colorWrap.appendChild(colorInput);
+  row2.appendChild(sizeWrap); row2.appendChild(colorWrap);
+  s2.appendChild(row2);
+
+  var alignWrap = document.createElement("div"); alignWrap.className="field-row";
+  alignWrap.innerHTML = "<label>Align</label>";
+  var alignGroup = document.createElement("div"); alignGroup.className="align-group";
+  [["left","Left"],["center","Center"],["right","Right"]].forEach(function(o){
+    var b = document.createElement("button"); b.type="button"; b.textContent=o[1];
+    if ((tc.align||"center")===o[0]) b.classList.add("active");
+    b.addEventListener("click", function(){ tc.align=o[0]; renderInspector(); renderFrameAt(state.playhead); });
+    alignGroup.appendChild(b);
+  });
+  alignWrap.appendChild(alignGroup);
+  s2.appendChild(alignWrap);
+
+  var animWrap = document.createElement("div"); animWrap.className="field-row";
+  animWrap.innerHTML = "<label>Animation</label>";
+  var animSelect = document.createElement("select");
+  [["none","None"],["fade","Fade"],["pop","Pop"]].forEach(function(o){
+    var opt = document.createElement("option"); opt.value=o[0]; opt.textContent=o[1];
+    if ((tc.anim||"fade")===o[0]) opt.selected=true;
+    animSelect.appendChild(opt);
+  });
+  animSelect.addEventListener("change", function(){ tc.anim = animSelect.value; });
+  animWrap.appendChild(animSelect);
+  s2.appendChild(animWrap);
+
+  var bgWrap = document.createElement("label"); bgWrap.className="duck-toggle"; bgWrap.style.marginTop="4px";
+  var bgCb = document.createElement("input"); bgCb.type="checkbox"; bgCb.checked = !!tc.bg;
+  bgCb.addEventListener("change", function(){ tc.bg = bgCb.checked; renderFrameAt(state.playhead); });
+  bgWrap.appendChild(bgCb); bgWrap.appendChild(document.createTextNode("Background plate behind text"));
+  s2.appendChild(bgWrap);
+  wrap.appendChild(s2);
+
+  var s3 = document.createElement("div"); s3.className="insp-section";
+  s3.innerHTML = '<div class="insp-title">Timing</div>';
+  var timingRow = document.createElement("div"); timingRow.className="row2";
+  var startWrap = document.createElement("div"); startWrap.className="field-row";
+  startWrap.innerHTML = "<label>Start (s)</label>";
+  var startInput = document.createElement("input"); startInput.type="number"; startInput.min=0; startInput.step=0.1; startInput.value=tc.start.toFixed(1);
+  startInput.addEventListener("input", function(){ tc.start = Math.max(0, Number(startInput.value)||0); relayoutClips(); renderAll(); });
+  startWrap.appendChild(startInput);
+  var durWrap = document.createElement("div"); durWrap.className="field-row";
+  durWrap.innerHTML = "<label>Duration (s)</label>";
+  var durInput = document.createElement("input"); durInput.type="number"; durInput.min=0.3; durInput.step=0.1; durInput.value=tc.dur.toFixed(1);
+  durInput.addEventListener("input", function(){ tc.dur = Math.max(0.3, Number(durInput.value)||1); relayoutClips(); renderAll(); });
+  durWrap.appendChild(durInput);
+  timingRow.appendChild(startWrap); timingRow.appendChild(durWrap);
+  s3.appendChild(timingRow);
+  wrap.appendChild(s3);
+  return wrap;
+}
+function buildMusicInspector(){
+  var m = state.music;
+  var wrap = document.createElement("div");
+  var s1 = document.createElement("div"); s1.className="insp-section";
+  s1.innerHTML = '<div class="insp-title">Music track</div><p style="margin:0 0 10px;font-size:12.5px;color:var(--text-dim);">'+escapeHtml(m.name)+'</p>';
+  wrap.appendChild(s1);
+  var s2 = document.createElement("div"); s2.className="insp-section";
+  s2.appendChild(sectionInner("Volume", buildSlider("mvol", Math.round(m.volume*100), 0, 100, 1, function(v){ m.volume=v/100; if(m._gain) m._gain.gain.value=m.volume; }, function(v){return v+"%";})));
+  wrap.appendChild(s2);
+
+  var s4 = document.createElement("div"); s4.className="insp-section";
+  var h4 = document.createElement("div"); h4.className="insp-title"; h4.textContent="Bass hits";
+  s4.appendChild(h4);
+  var statusP = document.createElement("p"); statusP.style.margin = "0 0 8px"; statusP.style.fontSize = "12.5px"; statusP.style.color = "var(--text-dim)";
+  if (m.beatStatus === "working") statusP.innerHTML = '<span class="spinner" style="margin-right:6px;"></span>Analyzing the track…';
+  else if (m.beatStatus === "done"){
+    if (!m.beats.length){
+      statusP.textContent = "No clear bass hits found in this track.";
+    } else {
+      var visibleCount = beatTimelineTimes().length;
+      var msg = m.beats.length + " bass hits found";
+      // The clip only uses part of the song (e.g. it was trimmed to match
+      // your video), so only the hits inside that range are usable --
+      // spelled out here since it's easy to add a full song and then wonder
+      // where most of its beats went.
+      if (visibleCount < m.beats.length) msg += ", " + visibleCount + " within this clip's current length";
+      msg += ". Clip edges and the playhead snap to them when “Snap to bass hits” is on" + (visibleCount < m.beats.length ? " — drag the right edge out to reach more of them." : ".");
+      statusP.textContent = msg;
+    }
+  }
+  else if (m.beatStatus === "error") statusP.textContent = "Detection failed — you can try again.";
+  else if (m.beatStatus === "unsupported") statusP.textContent = "This browser can't analyze audio offline, so auto-detection isn't available here.";
+  else statusP.textContent = "Not analyzed yet.";
+  s4.appendChild(statusP);
+  if (m.beatStatus !== "unsupported"){
+    var redo = document.createElement("button"); redo.type = "button"; redo.className = "btn btn-small";
+    redo.textContent = m.beatStatus === "working" ? "Analyzing…" : "Re-detect bass hits";
+    redo.disabled = m.beatStatus === "working";
+    redo.addEventListener("click", function(){ detectBeats(m); });
+    s4.appendChild(redo);
+  }
+  wrap.appendChild(s4);
+
+  var s3 = document.createElement("div"); s3.className="insp-section";
+  var info = document.createElement("div"); info.style.fontSize="12px"; info.style.color="var(--text-faint)";
+  info.textContent = "Drag the music block on the timeline to move it, or drag its edges to trim.";
+  s3.appendChild(info);
+  wrap.appendChild(s3);
+  return wrap;
+}
+function sectionInner(title, el){
+  var d = document.createElement("div");
+  var h = document.createElement("div"); h.className="insp-title"; h.textContent=title;
+  d.appendChild(h); d.appendChild(el);
+  return d;
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+/* ============================== timeline rendering ============================== */
+function renderTimeline(){
+  var totalPx = Math.max(600, state.totalDuration*PXPS + 160);
+  els.laneMain.style.width = totalPx + "px";
+  els.laneText.style.width = totalPx + "px";
+  els.laneMusic.style.width = totalPx + "px";
+  els.timelineRuler.style.width = totalPx + "px";
+
+  els.timelineRuler.innerHTML = "";
+  var step = state.totalDuration > 40 ? 5 : (state.totalDuration > 15 ? 2 : 1);
+  for (var t=0; t<=state.totalDuration+step; t+=step){
+    var tick = document.createElement("div");
+    tick.className = "tick";
+    tick.style.left = (t*PXPS) + "px";
+    tick.textContent = fmtTime(t);
+    els.timelineRuler.appendChild(tick);
+  }
+  beatTimelineTimes().forEach(function(bt){
+    var mark = document.createElement("div");
+    mark.className = "beat-tick";
+    mark.style.left = (bt*PXPS) + "px";
+    els.timelineRuler.appendChild(mark);
+  });
+
+  els.laneMainHint.hidden = state.clips.length > 0;
+  els.laneMain.querySelectorAll(".clip").forEach(function(n){ n.remove(); });
+  state.clips.forEach(function(clip, idx){
+    var block = document.createElement("div");
+    block.className = "clip" + (state.selection && state.selection.type==="clip" && state.selection.id===clip.id ? " selected":"");
+    block.style.left = (clip.start*PXPS) + "px";
+    block.style.width = Math.max(10, clip.dur*PXPS) + "px";
+    block.draggable = true;
+    var media = getMedia(clip.mediaId);
+    if (media && media.thumb) block.style.backgroundImage = "url(" + media.thumb + ")";
+    var fill = document.createElement("div"); fill.className="clip-fill"; block.appendChild(fill);
+    var name = document.createElement("span"); name.className="clip-name"; name.textContent = media ? media.name : "clip";
+    block.appendChild(name);
+    if (clip.transitionOut && clip.transitionOut.type !== "none" && idx < state.clips.length-1){
+      var tag = document.createElement("span"); tag.className="transition-tag";
+      tag.textContent = clip.transitionOut.type === "slide" ? "SLIDE" : "X-FADE";
+      block.appendChild(tag);
+    }
+    // Only a right trim handle on the main track: clips are sequential with no
+    // gaps, so a clip's left edge is always pinned to the end of the one
+    // before it (that's what keeps the track gapless) and can't be dragged
+    // independently. A left handle rendered here would visually sit still
+    // while the opposite edge moved, which looks broken. To trim the head of
+    // a clip instead: scrub the playhead to the new in-point and hit Split,
+    // then delete the piece you trimmed away — Split+Delete already cover
+    // this exactly, with more precision than a drag would give you.
+    var rh = document.createElement("div"); rh.className="trim-handle right"; block.appendChild(rh);
+    wireTrimHandle(rh, clip, "right", media);
+    block.addEventListener("click", function(e){ e.stopPropagation(); selectEntity("clip", clip.id); });
+    block.addEventListener("dragstart", function(e){
+      e.dataTransfer.setData("application/x-clip-id", clip.id);
+      e.dataTransfer.effectAllowed = "move";
+    });
+    els.laneMain.appendChild(block);
+  });
+
+  els.laneText.querySelectorAll(".clip").forEach(function(n){ n.remove(); });
+  state.texts.forEach(function(tc){
+    var block = document.createElement("div");
+    block.className = "clip text-clip" + (state.selection && state.selection.type==="text" && state.selection.id===tc.id ? " selected":"");
+    block.style.left = (tc.start*PXPS) + "px";
+    block.style.width = Math.max(10, tc.dur*PXPS) + "px";
+    var name = document.createElement("span"); name.className="clip-name"; name.textContent = tc.text.slice(0,24) || "Text";
+    block.appendChild(name);
+    var lh = document.createElement("div"); lh.className="trim-handle left"; block.appendChild(lh);
+    var rh = document.createElement("div"); rh.className="trim-handle right"; block.appendChild(rh);
+    wireFreeTrim(lh, tc, "left");
+    wireFreeTrim(rh, tc, "right");
+    wireFreeMove(block, tc);
+    block.addEventListener("click", function(e){ e.stopPropagation(); selectEntity("text", tc.id); });
+    els.laneText.appendChild(block);
+  });
+
+  els.laneMusic.querySelectorAll(".clip").forEach(function(n){ n.remove(); });
+  if (state.music){
+    var m = state.music;
+    var mblock = document.createElement("div");
+    mblock.className = "clip music-clip" + (state.selection && state.selection.type==="music" ? " selected":"");
+    mblock.style.left = (m.start*PXPS) + "px";
+    mblock.style.width = Math.max(10, (m.trimEnd-m.trimStart)*PXPS) + "px";
+    var wave = document.createElement("div"); wave.className="wave";
+    for (var i=0;i<24;i++){ var bar=document.createElement("span"); bar.style.height=(20+Math.random()*70)+"%"; wave.appendChild(bar); }
+    mblock.appendChild(wave);
+    var mname = document.createElement("span"); mname.className="clip-name"; mname.textContent = m.name;
+    mblock.appendChild(mname);
+    (m.beats||[]).forEach(function(b){
+      if (b < m.trimStart || b > m.trimEnd) return;
+      var mark = document.createElement("div");
+      mark.className = "beat-mark";
+      mark.style.left = ((b-m.trimStart)*PXPS) + "px";
+      mblock.appendChild(mark);
+    });
+    var mlh = document.createElement("div"); mlh.className="trim-handle left"; mblock.appendChild(mlh);
+    var mrh = document.createElement("div"); mrh.className="trim-handle right"; mblock.appendChild(mrh);
+    wireFreeTrim(mlh, m, "left");
+    wireFreeTrim(mrh, m, "right");
+    wireFreeMove(mblock, m);
+    mblock.addEventListener("click", function(e){ e.stopPropagation(); selectEntity("music", "music"); });
+    els.laneMusic.appendChild(mblock);
+  }
+  updatePlayheadDom();
+}
+
+function wireTrimHandle(handle, clip, side, media){
+  handle.addEventListener("pointerdown", function(e){
+    e.stopPropagation(); e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    var startX = e.clientX, startTS = clip.trimStart, startTE = clip.trimEnd;
+    var maxEnd = media && media.kind === "video" ? (media.duration||startTE) : MAX_IMAGE_DUR;
+    function onMove(ev){
+      var dt = (ev.clientX-startX)/PXPS;
+      if (side === "left"){
+        clip.trimStart = clamp(startTS+dt, 0, clip.trimEnd-MIN_CLIP_DUR);
+      } else {
+        var rawEnd = clamp(startTE+dt, clip.trimStart+MIN_CLIP_DUR, maxEnd);
+        if (state.snapToBeats){
+          var screenEnd = clip.start + (rawEnd - clip.trimStart);
+          var snapped = nearestBeatTime(screenEnd, 12/PXPS);
+          if (snapped != null) rawEnd = clip.trimStart + (snapped - clip.start);
+        }
+        clip.trimEnd = clamp(rawEnd, clip.trimStart+MIN_CLIP_DUR, maxEnd);
+      }
+      relayoutClips(); renderTimeline(); renderInspector(); renderFrameAt(state.playhead); updateTransportUI();
+    }
+    function onUp(){ window.removeEventListener("pointermove",onMove); window.removeEventListener("pointerup",onUp); }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+function wireFreeTrim(handle, obj, side){
+  handle.addEventListener("pointerdown", function(e){
+    e.stopPropagation(); e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    var startX = e.clientX;
+    function onMove(ev){
+      var dt = (ev.clientX-startX)/PXPS;
+      if (obj === state.music){
+        if (side === "left"){
+          // Mirror the text-clip convention: the left handle tracks the
+          // cursor and the clip's END stays anchored, by moving trimStart
+          // (the in-point within the audio) and the timeline start together.
+          var newTrimStart = clamp(obj._baseTS+dt, 0, obj._baseTE-MIN_CLIP_DUR);
+          var delta = newTrimStart - obj._baseTS;
+          obj.trimStart = newTrimStart;
+          obj.start = Math.max(0, obj._baseStart + delta);
+        } else {
+          obj.trimEnd = clamp(obj._baseTE+dt, obj.trimStart+MIN_CLIP_DUR, obj.naturalDuration);
+        }
+      } else {
+        if (side === "left"){ obj.start = Math.max(0, obj._baseStart+dt); obj.dur = Math.max(0.3, obj._baseDur-dt); }
+        else { obj.dur = Math.max(0.3, obj._baseDur+dt); }
+      }
+      relayoutClips(); renderTimeline(); renderInspector(); renderFrameAt(state.playhead); updateTransportUI();
+    }
+    if (obj === state.music){ obj._baseTS = obj.trimStart; obj._baseTE = obj.trimEnd; obj._baseStart = obj.start; obj._autoTrimmed = false; }
+    else { obj._baseStart = obj.start; obj._baseDur = obj.dur; }
+    function onUp(){ window.removeEventListener("pointermove",onMove); window.removeEventListener("pointerup",onUp); }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+function wireFreeMove(block, obj){
+  block.addEventListener("pointerdown", function(e){
+    if (e.target !== block && e.target.className && e.target.className.indexOf("trim-handle")!==-1) return;
+    e.stopPropagation();
+    block.setPointerCapture(e.pointerId);
+    var startX = e.clientX;
+    var baseStart = obj.start;
+    if (obj === state.music) obj._autoTrimmed = false;
+    function onMove(ev){
+      var dt = (ev.clientX-startX)/PXPS;
+      obj.start = Math.max(0, baseStart+dt);
+      relayoutClips(); renderTimeline(); updatePlayheadDom();
+    }
+    function onUp(){ window.removeEventListener("pointermove",onMove); window.removeEventListener("pointerup",onUp); renderFrameAt(state.playhead); }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+
+/* ============================== drag/drop onto lanes ============================== */
+els.laneMain.addEventListener("dragover", function(e){ e.preventDefault(); });
+els.laneMain.addEventListener("drop", function(e){
+  e.preventDefault();
+  var rect = els.laneMain.getBoundingClientRect();
+  var dropTime = (e.clientX - rect.left)/PXPS;
+  var insertIndex = 0;
+  state.clips.forEach(function(c){ if (c.start < dropTime) insertIndex++; });
+  var mediaId = e.dataTransfer.getData("application/x-media-id");
+  var clipId = e.dataTransfer.getData("application/x-clip-id");
+  if (mediaId){
+    var media = getMedia(mediaId);
+    if (media) appendClip(media, insertIndex);
+  } else if (clipId){
+    var oldIndex = state.clips.findIndex(function(c){ return c.id===clipId; });
+    if (oldIndex === -1) return;
+    var moving = state.clips[oldIndex];
+    state.clips.splice(oldIndex,1);
+    if (insertIndex > oldIndex) insertIndex--;
+    state.clips.splice(clamp(insertIndex,0,state.clips.length),0,moving);
+    relayoutClips(); renderAll();
+  }
+});
+els.timelineScroll.addEventListener("click", function(e){
+  if (e.target.closest(".clip")) return;
+  var rect = els.laneMain.getBoundingClientRect();
+  var t = (e.clientX-rect.left)/PXPS;
+  if (t < 0 || t > state.totalDuration+1) return;
+  pausePlayback();
+  state.playhead = snapTimelineTime(clamp(t,0,state.totalDuration));
+  syncMediaForTick(state.playhead,false);
+  renderFrameAt(state.playhead);
+  updateTransportUI(); updatePlayheadDom(); renderInspector();
+});
+
+/* ============================== render-all ============================== */
+function renderAll(){
+  relayoutClips();
+  renderTimeline();
+  renderInspector();
+  renderFrameAt(state.playhead);
+  updateTransportUI();
+  updatePlayheadDom();
+  updateBeatControls();
+  els.splitBtn.disabled = !(state.selection && state.selection.type==="clip");
+}
+
+/* ============================== top controls ============================== */
+els.addMediaBtn.addEventListener("click", function(){ els.fileInput.click(); });
+els.fileInput.addEventListener("change", function(){ if (els.fileInput.files.length) addFiles(els.fileInput.files); els.fileInput.value=""; });
+els.previewFrame.addEventListener("dragover", function(e){ e.preventDefault(); });
+
+els.aspectSelect.addEventListener("change", function(){
+  state.aspect = els.aspectSelect.value;
+  var a = ASPECTS[state.aspect];
+  state.cw = a.w; state.ch = a.h;
+  els.previewCanvas.width = a.w; els.previewCanvas.height = a.h;
+  els.previewCanvas.style.aspectRatio = a.w + " / " + a.h;
+  renderFrameAt(state.playhead);
+});
+(function initAspect(){
+  var a = ASPECTS[state.aspect];
+  els.previewCanvas.style.aspectRatio = a.w + " / " + a.h;
+})();
+
+els.playBtn.addEventListener("click", function(){ state.playing ? pausePlayback() : playPlayback(); });
+els.scrubber.addEventListener("input", function(){
+  pausePlayback();
+  var v = Number(els.scrubber.value)/1000;
+  state.playhead = v*state.totalDuration;
+  syncMediaForTick(state.playhead, false);
+  renderFrameAt(state.playhead);
+  updateTransportUI(); updatePlayheadDom();
+});
+els.duckToggle.addEventListener("change", function(){ state.duck = els.duckToggle.checked; });
+els.snapToggle.addEventListener("change", function(){ state.snapToBeats = els.snapToggle.checked; });
+els.prevBeatBtn.addEventListener("click", function(){
+  var times = beatTimelineTimes().filter(function(t){ return t < state.playhead - 0.01; });
+  if (!times.length) return;
+  pausePlayback();
+  state.playhead = times[times.length-1];
+  syncMediaForTick(state.playhead, false); renderFrameAt(state.playhead); updateTransportUI(); updatePlayheadDom(); renderInspector();
+});
+els.nextBeatBtn.addEventListener("click", function(){
+  var times = beatTimelineTimes().filter(function(t){ return t > state.playhead + 0.01; });
+  if (!times.length) return;
+  pausePlayback();
+  state.playhead = times[0];
+  syncMediaForTick(state.playhead, false); renderFrameAt(state.playhead); updateTransportUI(); updatePlayheadDom(); renderInspector();
+});
+function updateBeatControls(){
+  var times = beatTimelineTimes();
+  var has = times.length > 0;
+  els.snapToggleWrap.style.display = has ? "flex" : "none";
+  els.snapToggle.checked = state.snapToBeats;
+  els.prevBeatBtn.disabled = !has || !times.some(function(t){ return t < state.playhead-0.01; });
+  els.nextBeatBtn.disabled = !has || !times.some(function(t){ return t > state.playhead+0.01; });
+}
+
+els.splitBtn.addEventListener("click", function(){
+  if (!state.selection || state.selection.type !== "clip") return;
+  var clip = getClip(state.selection.id);
+  if (!clip) return;
+  var media = getMedia(clip.mediaId);
+  if (!(state.playhead > clip.start+0.05 && state.playhead < clip.end-0.05)) return;
+  var splitLocal = clip.trimStart + (state.playhead - clip.start);
+  var idx = state.clips.indexOf(clip);
+  var second = makeClip(media);
+  second.trimStart = splitLocal; second.trimEnd = clip.trimEnd;
+  second.look = clip.look; second.intensity = clip.intensity; second.volume = clip.volume;
+  second.transitionOut = { type: clip.transitionOut.type, dur: clip.transitionOut.dur };
+  clip.trimEnd = splitLocal;
+  clip.transitionOut = { type: "none", dur: 0.6 };
+  state.clips.splice(idx+1, 0, second);
+  relayoutClips();
+  selectEntity("clip", clip.id);
+  toast("Clip split.");
+});
+els.deleteClipBtn.addEventListener("click", function(){
+  if (!state.selection) return;
+  if (state.selection.type === "clip"){
+    var clip = getClip(state.selection.id);
+    if (clip){
+      state.clips.splice(state.clips.indexOf(clip),1);
+      if (clip.el){ try{ clip.el.pause(); clip.el.removeAttribute("src"); clip.el.remove(); }catch(e){} }
+    }
+  } else if (state.selection.type === "text"){
+    var tc = getText(state.selection.id);
+    if (tc) state.texts.splice(state.texts.indexOf(tc),1);
+  } else if (state.selection.type === "music"){
+    if (state.music && state.music.el){ try{ state.music.el.pause(); state.music.el.remove(); }catch(e){} }
+    state.music = null;
+  }
+  state.selection = null;
+  relayoutClips(); renderAll();
+  toast("Removed.");
+});
+
+els.addTextBtn.addEventListener("click", function(){
+  // New captions pick up the active preset's caption style, so text you add
+  // after choosing a preset already matches it instead of defaulting to
+  // plain white centered text every time.
+  var preset = PRESETS[state.activePreset];
+  var cap = preset ? preset.caption : null;
+  var tc = {
+    id: uid(), text: "Your caption here", start: state.playhead, dur: 2.5,
+    x: 0.5, y: 0.82,
+    fontSize: cap ? cap.fontSize : 48,
+    color: cap ? cap.color : "#ffffff",
+    bg: cap ? cap.bg : false,
+    align: cap ? cap.align : "center",
+    anim: cap ? cap.anim : "fade"
+  };
+  state.texts.push(tc);
+  relayoutClips();
+  selectEntity("text", tc.id);
+  toast("Caption added — drag it on the preview to position it.");
+});
+
+els.addMusicBtn.addEventListener("click", function(){ els.musicInput.click(); });
+els.musicInput.addEventListener("change", function(){
+  var file = els.musicInput.files[0];
+  els.musicInput.value = "";
+  if (!file) return;
+  if (state.music && state.music.el){ try{ state.music.el.pause(); state.music.el.remove(); }catch(e){} }
+  var url = URL.createObjectURL(file);
+  var audioEl = document.createElement("audio");
+  audioEl.src = url; audioEl.preload = "auto";
+  audioEl.style.display = "none";
+  document.body.appendChild(audioEl);
+  // _autoTrimmed means "the user hasn't touched this clip's position/length
+  // yet" -- while true, relayoutClips() keeps its length matched to the
+  // video track (see there for why that has to be the single source of
+  // truth, not state.totalDuration). The first manual trim or move clears it.
+  var m = { name: file.name, el: audioEl, objectURL: url, start: 0, trimStart: 0, trimEnd: 10, volume: 0.8, naturalDuration: 10, _audioWired:false, _autoTrimmed: true, beats: [], beatStatus: "idle" };
+  audioEl.addEventListener("loadedmetadata", function(){
+    m.naturalDuration = audioEl.duration || 10;
+    // If there's no video on the timeline yet (editing music-first), there's
+    // nothing for relayoutClips() to match this to, so default to the song's
+    // full length here -- that gives auto-arranged clips a full set of beats
+    // to land on as they're added, instead of starting from nothing.
+    if (!state._mainEnd) m.trimEnd = m.naturalDuration;
+    relayoutClips(); renderAll();
+  });
+  state.music = m;
+  selectEntity("music", "music");
+  toast("Music added — finding bass hits…");
+  detectBeats(m);
+});
+
+/* ============================== automatic bass-hit / beat detection ============================== */
+function beatTimelineTimes(){
+  if (!state.music || !state.music.beats || !state.music.beats.length) return [];
+  var m = state.music;
+  var out = [];
+  m.beats.forEach(function(b){
+    if (b < m.trimStart || b > m.trimEnd) return;
+    var t = m.start + (b - m.trimStart);
+    if (t >= 0 && t <= state.totalDuration + 0.001) out.push(t);
+  });
+  return out;
+}
+function nearestBeatTime(t, maxDist){
+  var times = beatTimelineTimes();
+  var best = null, bestDist = Infinity;
+  for (var i=0;i<times.length;i++){
+    var d = Math.abs(times[i]-t);
+    if (d < bestDist){ bestDist = d; best = times[i]; }
+  }
+  if (best != null && bestDist <= maxDist) return best;
+  return null;
+}
+function snapTimelineTime(t){
+  if (!state.snapToBeats) return t;
+  var snapped = nearestBeatTime(t, 12/PXPS); // ~12px catch radius
+  return snapped != null ? snapped : t;
+}
+async function detectBeats(m){
+  if (!window.OfflineAudioContext && !window.webkitOfflineAudioContext){ m.beatStatus = "unsupported"; renderInspector(); return; }
+  m.beatStatus = "working";
+  if (state.selection && state.selection.type === "music") renderInspector();
+  try {
+    var resp = await fetch(m.objectURL);
+    var arrBuf = await resp.arrayBuffer();
+    var ac = ensureAudioCtx();
+    var audioBuf = await ac.decodeAudioData(arrBuf);
+    var OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    var offline = new OAC(1, audioBuf.length, audioBuf.sampleRate);
+    var src = offline.createBufferSource(); src.buffer = audioBuf;
+    var lp = offline.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 150; lp.Q.value = 0.9;
+    src.connect(lp); lp.connect(offline.destination);
+    src.start(0);
+    var rendered = await offline.startRendering();
+    var data = rendered.getChannelData(0);
+    var sr = rendered.sampleRate;
+    var chunk = 1024, dt = chunk/sr;
+    var energies = [];
+    for (var i=0;i<data.length;i+=chunk){
+      var end = Math.min(i+chunk, data.length), sum = 0;
+      for (var j=i;j<end;j++){ sum += data[j]*data[j]; }
+      energies.push(Math.sqrt(sum/(end-i)));
+    }
+    var windowN = Math.max(1, Math.round(0.5/dt));
+    var minGap = 0.22;
+    var beats = [];
+    var lastBeat = -Infinity;
+    for (var k=0;k<energies.length;k++){
+      var lo = Math.max(0,k-windowN), hi = Math.min(energies.length,k+windowN);
+      var avg = 0; for (var n=lo;n<hi;n++) avg += energies[n]; avg /= (hi-lo);
+      var e = energies[k];
+      var isPeak = e > avg*1.35 && e > 0.015 && (k===0||e>=energies[k-1]) && (k===energies.length-1||e>=energies[k+1]);
+      var t = k*dt;
+      if (isPeak && t-lastBeat >= minGap){ beats.push(Number(t.toFixed(3))); lastBeat = t; }
+    }
+    m.beats = beats;
+    m.beatStatus = "done";
+    state.snapToBeats = true;
+    renderAll();
+    toast(beats.length ? ("Found " + beats.length + " bass hits — clip edges now snap to them.") : "Couldn't find clear bass hits in this track.");
+  } catch(e){
+    m.beatStatus = "error";
+    renderInspector();
+    toast("Bass-hit detection failed: " + (e && e.message || e));
+  }
+}
+
+/* ============================== automatic video stabilization ============================== */
+// Removes handheld shake from a clip without any real computer-vision
+// library: for a sampled set of timestamps across the clip's trimmed range,
+// estimate how far the frame moved relative to the previous sample (a small
+// exhaustive block search on a downscaled grayscale copy, minimizing the
+// mean absolute pixel difference), reconstruct the camera's cumulative wobble
+// path from those per-frame nudges, then compare that path to a heavily
+// smoothed ("intended") version of itself. The gap between the two at any
+// instant is exactly the shake to cancel -- so at render time we shift the
+// frame by that amount. Shifting reveals empty edges, so we also compute the
+// smallest extra zoom that keeps every correction covered, capped so a very
+// shaky clip gets clamped (soft-limited) rather than zoomed absurdly tight.
+// This targets fast, small, high-frequency jitter (hand tremor, footsteps) --
+// it won't fix a dramatic single whip-pan, which isn't really "shake" to
+// begin with.
+function sampleStabCorrection(sd, t){
+  var times = sd.times, dxs = sd.dx, dys = sd.dy;
+  if (!times || !times.length) return { dxFrac:0, dyFrac:0 };
+  if (t <= times[0]) return { dxFrac:dxs[0], dyFrac:dys[0] };
+  var last = times.length-1;
+  if (t >= times[last]) return { dxFrac:dxs[last], dyFrac:dys[last] };
+  for (var i=1;i<times.length;i++){
+    if (t <= times[i]){
+      var t0=times[i-1], t1=times[i], k = t1>t0 ? (t-t0)/(t1-t0) : 1;
+      return { dxFrac: dxs[i-1]+(dxs[i]-dxs[i-1])*k, dyFrac: dys[i-1]+(dys[i]-dys[i-1])*k };
+    }
+  }
+  return { dxFrac:dxs[last], dyFrac:dys[last] };
+}
+function clipStabStatus(clip){
+  return clip._stabData ? clip._stabData.status : "idle";
+}
+async function analyzeStabilization(clip){
+  var media = getMedia(clip.mediaId);
+  if (!media || media.kind !== "video"){ clip._stabData = { status:"unsupported" }; return; }
+  var myToken = ++clip._stabToken;
+  clip._stabData = { status:"working", progress:0 };
+  if (state.selection && state.selection.type==="clip" && state.selection.id===clip.id) renderInspector();
+  var tempV = null;
+  try {
+    tempV = document.createElement("video");
+    tempV.src = media.objectURL; tempV.muted = true; tempV.playsInline = true; tempV.preload = "auto";
+    // Headless/background decode pipelines can be unreliable about handing
+    // drawImage a freshly-seeked frame for a <video> that was never attached
+    // to the document -- it can silently keep serving a stale frame. The
+    // main timeline clips avoid this by being attached (off-screen, zero
+    // size) rather than left detached; do the same here for the same reason.
+    tempV.style.position = "absolute"; tempV.style.width = "1px"; tempV.style.height = "1px";
+    tempV.style.opacity = "0"; tempV.style.pointerEvents = "none";
+    document.body.appendChild(tempV);
+    await new Promise(function(res, rej){
+      tempV.addEventListener("loadedmetadata", res, { once:true });
+      tempV.addEventListener("error", function(){ rej(new Error("couldn't load video")); }, { once:true });
+      tempV.load();
+    });
+    if (clip._stabToken !== myToken) return;
+
+    var AW = 96, AH = Math.max(24, Math.round(AW * (media.height/media.width)));
+    var ac = document.createElement("canvas"); ac.width = AW; ac.height = AH;
+    var actx = ac.getContext("2d", { willReadFrequently:true });
+
+    var dur = Math.max(0.1, clip.trimEnd - clip.trimStart);
+    var stepT = 0.07; // ~14 samples/sec -- hand tremor runs up to ~10-12Hz,
+    // so this needs to clear Nyquist for most of that range to actually
+    // catch it rather than aliasing it into noise.
+    var sampleCount = Math.max(2, Math.min(420, Math.round(dur/stepT)+1));
+    stepT = dur/(sampleCount-1);
+
+    function grabFrame(tLocal){
+      return new Promise(function(res){
+        function onSeeked(){ tempV.removeEventListener("seeked", onSeeked); res(); }
+        tempV.addEventListener("seeked", onSeeked);
+        try { tempV.currentTime = clamp(clip.trimStart + tLocal, 0, media.duration||tLocal); }
+        catch(e){ res(); }
+      });
+    }
+    function frameLuma(){
+      actx.drawImage(tempV, 0, 0, AW, AH);
+      var d = actx.getImageData(0,0,AW,AH).data;
+      var out = new Float32Array(AW*AH);
+      for (var i=0,p=0;i<d.length;i+=4,p++) out[p] = 0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2];
+      return out;
+    }
+    function sad(a, b, dx, dy){
+      var sum=0, n=0;
+      var x0=Math.max(0,-dx), x1=Math.min(AW,AW-dx);
+      var y0=Math.max(0,-dy), y1=Math.min(AH,AH-dy);
+      for (var y=y0;y<y1;y++){
+        var rowA = y*AW, rowB = (y+dy)*AW+dx;
+        for (var x=x0;x<x1;x++){ sum += Math.abs(a[rowA+x]-b[rowB+x]); n++; }
+      }
+      return n>0 ? sum/n : Infinity;
+    }
+    function bestShift(prev, cur){
+      // Full-resolution exhaustive search -- a coarse stride with a small
+      // refine pass around it sounds cheaper, but it can lock onto the
+      // wrong local neighborhood entirely (the true optimum falls between
+      // the coarse grid points), which a 1px-radius refine then can't
+      // escape. At this analysis resolution the full search is still cheap
+      // (well under a millisecond per frame pair), so there's no real
+      // reason to risk it.
+      var RANGE = 12, best = {dx:0,dy:0}, bestScore = Infinity;
+      var zeroScore = sad(prev, cur, 0, 0);
+      for (var dy=-RANGE; dy<=RANGE; dy++){
+        for (var dx=-RANGE; dx<=RANGE; dx++){
+          var s = sad(prev, cur, dx, dy);
+          if (s < bestScore){ bestScore = s; best = {dx:dx, dy:dy}; }
+        }
+      }
+      // A flat or repetitive frame (sky, a blank wall, a regular pattern)
+      // has many near-identical matches, so "best" is largely noise --
+      // committing to it anyway is exactly what causes long-term drift.
+      // Only trust a match that's a clear, meaningful improvement over
+      // "the frame didn't move at all".
+      if (bestScore > zeroScore*0.92) return { dx:0, dy:0 };
+      return best;
+    }
+
+    var times = [], path = [];
+    var pos = { x:0, y:0 }, prevFrame = null;
+    var recentMags = [];
+    for (var i=0;i<sampleCount;i++){
+      if (clip._stabToken !== myToken) return;
+      var tLocal = i*stepT;
+      await grabFrame(tLocal);
+      if (clip._stabToken !== myToken) return;
+      var frame = frameLuma();
+      if (prevFrame){
+        var shift = bestShift(prevFrame, frame);
+        // Real hand shake doesn't usually teleport: reject a single step
+        // that's a wild outlier next to its recent neighbors (a mismatched
+        // block match) rather than let it permanently bias every sample
+        // after it, since pos accumulates forever.
+        var mag = Math.max(Math.abs(shift.dx), Math.abs(shift.dy));
+        if (recentMags.length >= 4){
+          var sortedMags = recentMags.slice().sort(function(a,b){return a-b;});
+          var median = sortedMags[Math.floor(sortedMags.length/2)];
+          var cap = Math.max(3, median*3.5);
+          if (mag > cap) shift = { dx:0, dy:0 };
+        }
+        if (shift.dx || shift.dy){
+          recentMags.push(mag);
+          if (recentMags.length > 12) recentMags.shift();
+        }
+        pos = { x: pos.x+shift.dx, y: pos.y+shift.dy };
+      }
+      times.push(tLocal);
+      path.push({ x:pos.x, y:pos.y });
+      prevFrame = frame;
+      clip._stabData.progress = (i+1)/sampleCount;
+      if (i % 6 === 0 && state.selection && state.selection.type==="clip" && state.selection.id===clip.id) renderInspector();
+    }
+    if (clip._stabToken !== myToken) return;
+
+    // Smooth the reconstructed path with a ~1s moving average -- that's the
+    // path the camera "meant" to follow -- then the correction at each
+    // sample is simply how far the real (jittery) path has to be nudged to
+    // land back on the smoothed one. Reflect the path around each end
+    // rather than truncating the window there, so the first/last second
+    // isn't compared against a lopsided, edge-biased average.
+    var windowN = Math.max(1, Math.round(1.0/stepT));
+    var n = path.length;
+    function pathAt(idx){
+      if (idx < 0) idx = -idx;
+      if (idx > n-1) idx = (n-1)*2 - idx;
+      idx = clamp(idx, 0, n-1);
+      return path[idx];
+    }
+    var smooth = path.map(function(_, idx){
+      var sx=0, sy=0, cnt=0;
+      for (var k=idx-windowN;k<=idx+windowN;k++){ var p=pathAt(k); sx+=p.x; sy+=p.y; cnt++; }
+      return { x: sx/cnt, y: sy/cnt };
+    });
+    var dxFrac = [], dyFrac = [], maxAbs = 0;
+    for (var j=0;j<path.length;j++){
+      var cx = (smooth[j].x - path[j].x)/AW, cy = (smooth[j].y - path[j].y)/AH;
+      dxFrac.push(cx); dyFrac.push(cy);
+      maxAbs = Math.max(maxAbs, Math.abs(cx), Math.abs(cy));
+    }
+    var ZOOM_CAP = 0.30, MARGIN = 1.15;
+    var zoomNeeded = maxAbs*MARGIN;
+    var zoom = Math.min(ZOOM_CAP, zoomNeeded);
+    if (zoomNeeded > ZOOM_CAP && maxAbs > 0){
+      // The needed correction would require more zoom than we're willing to
+      // apply -- soft-clip the correction itself so we never reveal an empty
+      // edge, at the cost of not fully canceling the most extreme jitter.
+      var clampFrac = ZOOM_CAP/MARGIN;
+      dxFrac = dxFrac.map(function(v){ return clamp(v,-clampFrac,clampFrac); });
+      dyFrac = dyFrac.map(function(v){ return clamp(v,-clampFrac,clampFrac); });
+    }
+    clip._stabData = {
+      status:"done", times:times, dx:dxFrac, dy:dyFrac, zoom:zoom,
+      analyzedTrimStart: clip.trimStart, analyzedTrimEnd: clip.trimEnd
+    };
+    if (state.selection && state.selection.type==="clip" && state.selection.id===clip.id) renderInspector();
+    renderFrameAt(state.playhead);
+    toast("Shake smoothed" + (zoom>0.01 ? " — zoomed in " + Math.round(zoom*100) + "% to hide the correction." : "."));
+  } catch(e){
+    if (clip._stabToken !== myToken) return;
+    clip._stabData = { status:"error" };
+    renderInspector();
+    toast("Stabilization failed: " + (e && e.message || e));
+  } finally {
+    if (tempV){ try { tempV.src = ""; tempV.remove(); } catch(e){} }
+  }
+}
+
+/* ============================== export ============================== */
+function pickMimeType(){
+  var candidates = [
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm"
+  ];
+  for (var i=0;i<candidates.length;i++){
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+  }
+  return "video/webm";
+}
+els.exportBtn.addEventListener("click", function(){
+  if (!state.clips.length){ toast("Add clips to your timeline before exporting."); return; }
+  pausePlayback();
+  els.exportBackdrop.hidden = false;
+  var mt = pickMimeType();
+  var ext = mt.indexOf("mp4") !== -1 ? "MP4" : "WebM";
+  els.exportModalBody.textContent = "Rendering plays your whole timeline once in real time (about " + fmtTime(state.totalDuration) + ") while it records. Your browser will save this as " + ext + ".";
+  els.exportProgressFill.style.width = "0%";
+  els.exportStatusLine.innerHTML = "&nbsp;";
+});
+els.exportCancelBtn.addEventListener("click", function(){ els.exportBackdrop.hidden = true; });
+
+var exportState = null;
+els.exportStartBtn.addEventListener("click", function(){
+  if (state.exporting) return;
+  startExport();
+});
+
+function startExport(){
+  state.exporting = true;
+  els.exportStartBtn.disabled = true;
+  els.exportCancelBtn.textContent = "Close";
+  var ac = ensureAudioCtx();
+  ac.resume();
+  state.clips.forEach(function(c){ if (c.kind==="video") ensureClipAudioNode(c); });
+  if (state.music) ensureMusicAudioNode();
+
+  var videoTrack = els.previewCanvas.captureStream(30).getVideoTracks()[0];
+  var audioTracks = state.recordingDest ? state.recordingDest.stream.getAudioTracks() : [];
+  var mixed = new MediaStream([videoTrack].concat(audioTracks));
+  var mimeType = pickMimeType();
+  var ext = mimeType.indexOf("mp4") !== -1 ? "mp4" : "webm";
+  var chunks = [];
+  var recorder;
+  try {
+    recorder = new MediaRecorder(mixed, { mimeType: mimeType, videoBitsPerSecond: 6000000 });
+  } catch(e){
+    toast("Export failed to start: " + e.message);
+    state.exporting = false; els.exportStartBtn.disabled = false;
+    return;
+  }
+  recorder.ondataavailable = function(e){ if (e.data && e.data.size) chunks.push(e.data); };
+  recorder.onstop = function(){
+    var blob = new Blob(chunks, { type: mimeType });
+    finishExport(blob, ext);
+  };
+
+  state.playhead = 0;
+  syncMediaForTick(0, false);
+  renderFrameAt(0);
+  state.playing = true; lastTs = null;
+  recorder.start(250);
+  els.exportStatusLine.textContent = "Recording… 0:00.0 / " + fmtTime(state.totalDuration);
+
+  function exportTick(ts){
+    if (!state.playing){ return; }
+    if (lastTs == null) lastTs = ts;
+    var dt = (ts-lastTs)/1000; lastTs = ts;
+    state.playhead = Math.min(state.totalDuration, state.playhead+dt);
+    syncMediaForTick(state.playhead, true);
+    renderFrameAt(state.playhead);
+    var pct = state.totalDuration>0 ? (state.playhead/state.totalDuration*100) : 100;
+    els.exportProgressFill.style.width = pct + "%";
+    els.exportStatusLine.textContent = "Recording… " + fmtTime(state.playhead) + " / " + fmtTime(state.totalDuration);
+    if (state.playhead >= state.totalDuration - 0.001){
+      state.playing = false;
+      syncMediaForTick(state.playhead, false);
+      setTimeout(function(){ recorder.stop(); }, 200);
+      return;
+    }
+    requestAnimationFrame(exportTick);
+  }
+  requestAnimationFrame(exportTick);
+}
+
+function finishExport(blob, ext){
+  state.exporting = false;
+  els.exportProgressFill.style.width = "100%";
+  els.exportStatusLine.textContent = "Done — " + humanSize(blob.size);
+  var filename = "cutting-room-export." + ext;
+  if (window.claude && window.claude.use){
+    window.claude.use("downloads").then(function(downloads){
+      if (!downloads){ offerBlobFallback(blob, filename); return; }
+      downloads.save({ filename: filename, data: blob }).then(function(){
+        toast("Saved " + filename + ".");
+        els.exportBackdrop.hidden = true;
+        resetExportModal();
+      }).catch(function(err){
+        if (err && err.code === "declined"){ els.exportBackdrop.hidden = true; resetExportModal(); return; }
+        toast("Couldn't save automatically (" + (err&&err.code||"error") + ").");
+      });
+    }).catch(function(){ offerBlobFallback(blob, filename); });
+  } else {
+    offerBlobFallback(blob, filename);
+  }
+}
+function offerBlobFallback(blob, filename){
+  els.exportStatusLine.textContent = "Export ready (" + humanSize(blob.size) + ") — downloads aren't available in this preview.";
+}
+function resetExportModal(){
+  els.exportStartBtn.disabled = false;
+  els.exportCancelBtn.textContent = "Cancel";
+}
+
+/* ============================== keyboard ============================== */
+window.addEventListener("keydown", function(e){
+  if (document.activeElement && ["INPUT","TEXTAREA","SELECT"].indexOf(document.activeElement.tagName) !== -1) return;
+  if (e.code === "Space"){ e.preventDefault(); state.playing ? pausePlayback() : playPlayback(); }
+  if ((e.key === "Delete" || e.key === "Backspace") && state.selection){ e.preventDefault(); els.deleteClipBtn.click(); }
+});
+
+/* ============================== init ============================== */
+document.fonts && document.fonts.ready && document.fonts.ready.then(function(){ renderFrameAt(state.playhead); });
+renderAll();
+renderLibrary();
+
+})();
+</script>
+
